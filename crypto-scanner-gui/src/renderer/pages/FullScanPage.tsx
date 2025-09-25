@@ -17,6 +17,11 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
   const [error, setError] = React.useState<string | null>(null);
 
   const handleStartScan = async () => {
+    // Temporarily disable FULL SCAN functionality
+    alert('Full scan functionality is temporarily disabled. Please use Quick Scan instead.');
+    return;
+
+    /*
     try {
       setError(null);
       onStartScan(true);
@@ -33,10 +38,12 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
       });
 
       if (scanResult.success) {
+        const now = new Date();
+        const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
         const result: ScanResult = {
           id: generateId(),
-          date: new Date().toISOString().split('T')[0],
-          time: new Date().toISOString(),
+          date: localDate.toISOString().split('T')[0],
+          time: now.toISOString(),
           type: 'FULL_SCAN',
           filePath: '/',
           nonPqcCount: scanResult.nonPqcCount || 0,
@@ -57,6 +64,7 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
       onNavigate('full-scan');
       setError(error instanceof Error ? error.message : 'Unknown error occurred');
     }
+    */
   };
 
   return (
@@ -289,57 +297,6 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
             </p>
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div style={{
-              width: '100%',
-              maxWidth: '522px',
-              padding: '16px',
-              borderRadius: '18px',
-              background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              backdropFilter: 'blur(10px)',
-              textAlign: 'center'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                marginBottom: '8px'
-              }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#EF4444" strokeWidth="2"/>
-                </svg>
-                <span style={{
-                  fontFamily: 'SF Pro',
-                  fontSize: '14px',
-                  color: '#EF4444',
-                  fontWeight: 600
-                }}>Scan Failed</span>
-              </div>
-              <p style={{
-                fontFamily: 'SF Pro',
-                fontSize: '13px',
-                color: '#FCA5A5',
-                margin: '0 0 12px 0'
-              }}>{error}</p>
-              <button
-                onClick={() => setError(null)}
-                style={{
-                  padding: '8px 16px',
-                  fontSize: '12px',
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  color: '#FCA5A5',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer'
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
 
           {/* Scan Button */}
           <button

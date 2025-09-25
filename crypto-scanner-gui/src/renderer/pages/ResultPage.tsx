@@ -164,8 +164,9 @@ const ResultPage: React.FC<ResultPageProps> = ({
           display: 'flex',
           flexDirection: 'column',
           gap: 'clamp(15px, 2vh, 20px)',
-          maxHeight: 'clamp(400px, 46vh, 503px)',
-          overflowY: 'auto'
+          maxHeight: 'calc(4 * (100px + clamp(15px, 2vh, 20px)) - clamp(15px, 2vh, 20px))',
+          overflowY: sortedDates.length > 4 ? 'auto' : 'visible',
+          paddingRight: sortedDates.length > 4 ? '10px' : '0'
         }}>
           {sortedDates.map(date => {
             const resultsForDate = groupedResults[date];
@@ -277,7 +278,7 @@ const ResultPage: React.FC<ResultPageProps> = ({
         }}>
           {selectedResults.length > 0 ? (
             <>
-              {selectedResults.slice(0, 2).map((result, index) => (
+              {selectedResults.map((result, index) => (
                 <div key={result.id} style={{
                   position: 'relative',
                   height: '100%',
@@ -417,26 +418,6 @@ const ResultPage: React.FC<ResultPageProps> = ({
                   </button>
                 </div>
               ))}
-              {selectedResults.length > 2 && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minWidth: '150px',
-                  padding: '20px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '18px',
-                  backdropFilter: 'blur(16px)'
-                }}>
-                  <span style={{
-                    fontFamily: 'SF Pro',
-                    fontSize: '16px',
-                    color: 'rgba(255, 255, 255, 0.8)',
-                    textAlign: 'center'
-                  }}>+{selectedResults.length - 2}<br/>more results<br/>📋</span>
-                </div>
-              )}
             </>
           ) : selectedDate ? (
             <div style={{

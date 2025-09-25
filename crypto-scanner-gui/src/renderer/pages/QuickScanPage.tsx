@@ -49,28 +49,26 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
         new Promise(resolve => setTimeout(resolve, 2000)) // 2 second minimum delay
       ]);
 
-      if (scanResult.success) {
-        const result: ScanResult = {
-          id: generateId(),
-          date: new Date().toISOString().split('T')[0],
-          time: new Date().toISOString(),
-          type: 'QUICK_SCAN',
-          filePath: selectedPath,
-          nonPqcCount: scanResult.nonPqcCount || 0,
-          fileCount: scanResult.fileCount || (scanType === 'file' ? 1 : 0),
-          riskLevel: scanResult.nonPqcCount > 50 ? 'High' : scanResult.nonPqcCount > 10 ? 'Medium' : 'Low',
-          detections: scanResult.detections || []
-        };
+      const now = new Date();
+      const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
+      const result: ScanResult = {
+        id: generateId(),
+        date: localDate.toISOString().split('T')[0],
+        time: now.toISOString(),
+        type: 'QUICK_SCAN',
+        filePath: selectedPath,
+        nonPqcCount: scanResult.nonPqcCount || 0,
+        fileCount: scanResult.fileCount || (scanType === 'file' ? 1 : 0),
+        riskLevel: scanResult.nonPqcCount > 50 ? 'High' : scanResult.nonPqcCount > 10 ? 'Medium' : 'Low',
+        detections: scanResult.detections || []
+      };
 
-        onScanComplete(result);
-        onStartScan(false);
-        onNavigate('result');
-      } else {
-        throw new Error(scanResult.error || 'Scan failed');
-      }
+      onScanComplete(result);
+      onStartScan(false, undefined);
+      onNavigate('result');
     } catch (error) {
       console.error('Scan failed:', error);
-      onStartScan(false);
+      onStartScan(false, undefined);
       onNavigate('quick-scan');
       // Show error to user
       alert(`Scan failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

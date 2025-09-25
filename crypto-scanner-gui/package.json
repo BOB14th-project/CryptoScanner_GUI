@@ -5,7 +5,7 @@
   "main": "dist/main/main.js",
   "scripts": {
     "build-renderer": "webpack --mode=production",
-    "build-main": "tsc --project tsconfig.main.json",
+    "build-main": "tsc --project tsconfig.main.json && cd ../CryptoScanner && ./build_cli_only.sh && cp CryptoScannerCLI ../crypto-scanner-gui/dist/main/CryptoScanner && cp patterns.json ../crypto-scanner-gui/dist/main/patterns.json && chmod +x ../crypto-scanner-gui/dist/main/CryptoScanner",
     "build-preload": "tsc --project tsconfig.preload.json",
     "build": "npm run build-renderer && npm run build-main && npm run build-preload",
     "dev-renderer": "webpack serve --mode=development",
@@ -56,6 +56,10 @@
     "files": [
       "dist/**/*",
       "src/renderer/assets/**/*"
+    ],
+    "asarUnpack": [
+      "dist/main/CryptoScanner",
+      "dist/main/patterns.json"
     ],
     "mac": {
       "icon": "src/renderer/assets/icon.icns",

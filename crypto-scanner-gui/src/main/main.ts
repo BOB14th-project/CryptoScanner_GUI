@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 
+console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
+
 let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
 
@@ -47,6 +49,7 @@ app.on('activate', () => {
 });
 
 // IPC handlers
+console.log('=== IPC Handlers Registration Started ===');
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
@@ -70,25 +73,70 @@ ipcMain.handle('select-file', async () => {
 });
 
 ipcMain.handle('start-scan', async (event, scanOptions) => {
+  console.log('=== start-scan IPC called ===');
   return new Promise((resolve, reject) => {
     // Path to the compiled CryptoScanner binary
-    const scannerPath = path.join(__dirname, '../CryptoScanner');
+    let scannerPath = path.join(__dirname, 'CryptoScanner');
+
+    // In production app, use the CLI binary from the app bundle
+    if (process.resourcesPath) {
+      // For packaged app, use our CLI binary from resources/app.asar.unpacked
+      scannerPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', 'CryptoScanner');
+    }
 
     try {
       // Check if scanner binary exists
       const fs = require('fs');
       if (!fs.existsSync(scannerPath)) {
-        reject({ success: false, error: 'CryptoScanner binary not found. Please build it first using: cd CryptoScanner && make' });
+        reject(new Error('CryptoScanner binary not found. Please build it first using: cd CryptoScanner && make'));
         return;
       }
 
+      console.log('Starting scan with path:', scanOptions.path);
+      console.log('Scanner binary path:', scannerPath);
+      console.log('Binary exists:', fs.existsSync(scannerPath));
+      console.log('process.resourcesPath:', process.resourcesPath);
+      console.log('__dirname:', __dirname);
+
+      // Set working directory to where patterns.json is located
+      let cryptoScannerDir;
+
+      if (process.resourcesPath) {
+        // In packaged app, patterns.json is in the same directory as the CLI binary
+        cryptoScannerDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main');
+      } else {
+        // In development, use the CryptoScanner source directory
+        cryptoScannerDir = path.resolve(__dirname, '..', '..', '..', 'CryptoScanner');
+      }
+
+      // Fallback to absolute path if patterns.json not found
+      if (!require('fs').existsSync(path.join(cryptoScannerDir, 'patterns.json'))) {
+        cryptoScannerDir = '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner';
+      }
+
+      console.log('About to spawn process:');
+      console.log('  scannerPath:', scannerPath);
+      console.log('  args:', [scanOptions.path]);
+      console.log('  cwd:', cryptoScannerDir);
+
       scannerProcess = spawn(scannerPath, [scanOptions.path], {
         stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: cryptoScannerDir, // Set working directory to CryptoScanner folder
+        env: {
+          ...process.env,
+          DYLD_LIBRARY_PATH: '/opt/homebrew/lib',
+          DYLD_FALLBACK_LIBRARY_PATH: '/opt/homebrew/lib',
+          PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH || ''),
+          DISPLAY: ':0'
+        }
       });
 
       let output = '';
       let errorOutput = '';
       let detections: any[] = [];
+      let totalFiles = 0;
+      let scannedFiles = 0;
+      let currentFile = '';
 
       scannerProcess.stdout?.on('data', (data) => {
         const lines = data.toString().split('\n');
@@ -99,35 +147,81 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
             output += line + '\n';
             console.log(`Processing line: "${line}"`);
 
-            // Parse CSV output: filePath,algorithm,severity,matchType
-            const parts = line.split(',');
-            console.log(`Split into ${parts.length} parts:`, parts);
+            // Parse different output types from CryptoScanner
+            if (line.startsWith('PROGRESS:')) {
+              const parts = line.split(':');
+              if (parts[1] === 'FILE') {
+                currentFile = parts[2];
+                scannedFiles = parseInt(parts[3]) || 0;
+                totalFiles = parseInt(parts[4]) || 1;
+              } else if (parts[1] === 'START') {
+                currentFile = parts[2];
+              } else if (parts[1] === 'COMPLETE') {
+                scannedFiles = totalFiles;
+              }
 
-            if (parts.length >= 3) {
-              const detection = {
-                filePath: parts[0],
-                algorithm: parts[1],
-                severity: parts[2],
-                evidenceType: parts[3] || 'binary',
-                matchString: parts[3] || '',
-                offset: 0
-              };
-              detections.push(detection);
-              console.log('Added detection:', detection);
+              // Send progress updates to renderer
+              mainWindow.webContents.send('scan-progress', {
+                type: 'progress',
+                currentFile: currentFile || 'Scanning...',
+                filesDone: scannedFiles,
+                filesTotal: totalFiles,
+                percentage: totalFiles > 0 ? Math.round((scannedFiles / totalFiles) * 100) : 0,
+                detectionCount: detections.length
+              });
+            } else if (line.startsWith('DETECTION:')) {
+              // Parse detection: DETECTION:filePath,offset,algorithm,matchString,evidenceType,severity
+              const detectionData = line.substring(10); // Remove 'DETECTION:' prefix
+              const parts = detectionData.split(',');
+
+              if (parts.length >= 6) {
+                const detection = {
+                  filePath: parts[0],
+                  offset: parseInt(parts[1]) || 0,
+                  algorithm: parts[2],
+                  matchString: parts[3],
+                  evidenceType: parts[4],
+                  severity: parts[5]
+                };
+                detections.push(detection);
+                console.log('Added detection:', detection);
+
+                // Send updated detection count
+                mainWindow.webContents.send('scan-progress', {
+                  type: 'progress',
+                  currentFile: currentFile || 'Scanning...',
+                  filesDone: scannedFiles,
+                  filesTotal: totalFiles,
+                  percentage: totalFiles > 0 ? Math.round((scannedFiles / totalFiles) * 100) : 0,
+                  detectionCount: detections.length
+                });
+              }
+            } else if (line.startsWith('SUMMARY:')) {
+              // Handle summary information
+              console.log('Summary info:', line);
+            } else {
+              // Legacy CSV format fallback: filePath,algorithm,severity
+              const parts = line.split(',');
+              if (parts.length >= 3) {
+                const detection = {
+                  filePath: parts[0],
+                  offset: 0,
+                  algorithm: parts[1],
+                  matchString: '',
+                  evidenceType: 'binary',
+                  severity: parts[2]
+                };
+                detections.push(detection);
+                console.log('Added legacy detection:', detection);
+              }
             }
-
-            // Send progress updates to renderer
-            mainWindow.webContents.send('scan-progress', {
-              type: 'progress',
-              currentFile: parts[0] || 'Scanning...',
-              detectionCount: detections.length
-            });
           }
         }
       });
 
       scannerProcess.stderr?.on('data', (data) => {
         errorOutput += data.toString();
+        console.error('Scanner stderr:', data.toString());
       });
 
       scannerProcess.on('close', (code) => {
@@ -145,17 +239,19 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
             fileCount: new Set(detections.map(d => d.filePath)).size
           });
         } else {
-          reject({ success: false, error: errorOutput || 'Scan failed with code ' + code });
+          reject(new Error(errorOutput || 'Scan failed with code ' + code));
         }
         scannerProcess = null;
       });
 
       scannerProcess.on('error', (error) => {
-        reject({ success: false, error: error.message });
+        console.error('Scanner process error:', error);
+        reject(error);
         scannerProcess = null;
       });
     } catch (error) {
-      reject({ success: false, error: (error as Error).message });
+      console.error('Scan setup error:', error);
+      reject(error instanceof Error ? error : new Error(String(error)));
     }
   });
 });
