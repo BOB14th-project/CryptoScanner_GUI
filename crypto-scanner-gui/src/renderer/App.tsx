@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppState, PageType, ScanResult } from './types';
+import { AppState, PageType, ScanResult, ScanType } from './types';
 import StartPage from './pages/StartPage';
 import MainPage from './pages/MainPage';
 import ResultPage from './pages/ResultPage';
@@ -17,6 +17,7 @@ const App: React.FC = () => {
     isScanning: false,
   });
   const [pageHistory, setPageHistory] = useState<PageType[]>(['start']);
+  const [currentScanType, setCurrentScanType] = useState<ScanType>('full');
 
   useEffect(() => {
     // Load saved scan results on app start
@@ -142,7 +143,10 @@ const App: React.FC = () => {
         return (
           <QuickScanPage
             onNavigate={navigateToPage}
-            onStartScan={setScanning}
+            onStartScan={(isScanning, scanType) => {
+              setScanning(isScanning);
+              if (scanType) setCurrentScanType(scanType);
+            }}
             onScanComplete={addScanResult}
           />
         );
@@ -150,7 +154,10 @@ const App: React.FC = () => {
         return (
           <FullScanPage
             onNavigate={navigateToPage}
-            onStartScan={setScanning}
+            onStartScan={(isScanning) => {
+              setScanning(isScanning);
+              setCurrentScanType('full');
+            }}
             onScanComplete={addScanResult}
           />
         );
@@ -158,6 +165,7 @@ const App: React.FC = () => {
         return (
           <LoadingPage
             progress={appState.scanProgress}
+            scanType={currentScanType}
             onNavigate={navigateToPage}
             onCancel={() => {
               setScanning(false);

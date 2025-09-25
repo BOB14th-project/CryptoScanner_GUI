@@ -5,7 +5,7 @@ import Header from '../components/Header';
 
 interface QuickScanPageProps {
   onNavigate: (page: PageType) => void;
-  onStartScan: (isScanning: boolean) => void;
+  onStartScan: (isScanning: boolean, scanType?: ScanType) => void;
   onScanComplete: (result: ScanResult) => void;
 }
 
@@ -37,7 +37,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
     if (!selectedPath || !window.electronAPI) return;
 
     try {
-      onStartScan(true);
+      onStartScan(true, scanType);
       onNavigate('loading');
 
       // Add minimum delay to show loading screen
