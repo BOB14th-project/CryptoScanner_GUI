@@ -1,3 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+
 #include "./alloc.c"
 #include "./get_changed_ranges.c"
 #include "./language.c"
