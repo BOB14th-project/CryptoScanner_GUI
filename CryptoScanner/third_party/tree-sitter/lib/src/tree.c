@@ -1,3 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+
 #include "tree_sitter/api.h"
 #include "./array.h"
 #include "./get_changed_ranges.h"

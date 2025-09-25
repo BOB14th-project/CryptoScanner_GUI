@@ -1,3 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+
 #include <stdio.h>
 #include <limits.h>
 #include <stdbool.h>
