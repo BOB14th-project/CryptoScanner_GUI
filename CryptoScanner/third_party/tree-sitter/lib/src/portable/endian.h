@@ -26,10 +26,17 @@
     defined(__MSYS__) || \
     defined(__EMSCRIPTEN__) || \
     defined(__wasi__) || \
-    defined(__wasm__)
+    defined(__wasm__) || \
+    defined(__KALI_LINUX__) || \
+    defined(__DEBIAN__) || \
+    defined(__UBUNTU__)
 
 #if defined(__NetBSD__)
 #define _NETBSD_SOURCE 1
+#endif
+
+#if defined(__linux__)
+#define _GNU_SOURCE 1
 #endif
 
 # include <endian.h>
