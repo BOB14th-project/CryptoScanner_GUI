@@ -49,7 +49,9 @@ app.on('activate', () => {
 // IPC handlers
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory'],
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select Folder to Scan',
+    buttonLabel: 'Select Folder',
   });
   return result.filePaths[0] || null;
 });
@@ -57,6 +59,12 @@ ipcMain.handle('select-folder', async () => {
 ipcMain.handle('select-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
+    title: 'Select File to Scan',
+    buttonLabel: 'Select File',
+    filters: [
+      { name: 'All Files', extensions: ['*'] },
+      { name: 'Executable Files', extensions: ['exe', 'bin', 'out', 'app'] },
+    ],
   });
   return result.filePaths[0] || null;
 });
