@@ -602,7 +602,7 @@ static std::vector<Detection> scanJarViaMiniZ_impl(const std::string& filePath,
         mz_zip_archive_file_stat st; std::memset(&st, 0, sizeof(st));
         if (!mz_zip_reader_file_stat(&zip, i, &st)) continue;
         if (st.m_is_directory) continue;
-        std::string entry = st.m_filename ? st.m_filename : "";
+        std::string entry = st.m_filename[0] ? st.m_filename : "";
         std::string ext = CryptoScanner::lowercaseExt(entry);
         if (!(ext == ".class" || ext == ".java")) continue;
         size_t out_size = 0;
