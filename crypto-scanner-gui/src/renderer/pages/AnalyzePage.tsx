@@ -9,6 +9,101 @@ interface AnalyzePageProps {
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
+  // Parse CSV data to extract statistics
+  const parseResultData = () => {
+    if (!result.detections || result.detections.length === 0) {
+      return {
+        nonPqcCount: 0,
+        fileCount: 0,
+        riskLevel: 'LOW',
+        algorithmCounts: {},
+        severityCounts: { low: 0, med: 0, high: 0 }
+      };
+    }
+
+    const detections = result.detections;
+    const nonPqcCount = detections.length;
+
+    // Count unique files
+    const uniqueFiles = new Set(detections.map(d => d.filePath));
+    const fileCount = uniqueFiles.size;
+
+    // Count algorithms
+    const algorithmCounts: { [key: string]: number } = {};
+    detections.forEach(detection => {
+      const algo = detection.algorithm;
+      algorithmCounts[algo] = (algorithmCounts[algo] || 0) + 1;
+    });
+
+    // Count severities
+    const severityCounts = { low: 0, med: 0, high: 0 };
+    detections.forEach(detection => {
+      const severity = detection.severity.toLowerCase();
+      if (severity === 'low') severityCounts.low++;
+      else if (severity === 'med') severityCounts.med++;
+      else if (severity === 'high') severityCounts.high++;
+    });
+
+    // Determine overall risk level
+    const totalSeverity = severityCounts.low + severityCounts.med + severityCounts.high;
+    let riskLevel = 'LOW';
+    if (severityCounts.high / totalSeverity > 0.3) riskLevel = 'HIGH';
+    else if (severityCounts.med / totalSeverity > 0.4) riskLevel = 'MED';
+
+    return {
+      nonPqcCount,
+      fileCount,
+      riskLevel,
+      algorithmCounts,
+      severityCounts
+    };
+  };
+
+  const resultData = parseResultData();
+
+  // Calculate algorithm data and colors for use across components
+  const totalCount = Object.values(resultData.algorithmCounts).reduce((sum, count) => sum + count, 0);
+
+  // Generate dynamic colors for unlimited algorithms
+  const generateColor = (index: number): string => {
+    // Base color palette (50 predefined colors)
+    const baseColors = [
+      '#5856D6', '#0088FF', '#00C0E8', '#FF6B35', '#32D74B', '#FFD60A',
+      '#FF453A', '#9599AB', '#007AFF', '#34C759', '#FF9500', '#AF52DE',
+      '#FF2D92', '#5AC8FA', '#FFCC02', '#30D158', '#BF5AF2', '#FF3B30',
+      '#FF6EC7', '#BF5AF2', '#AC8E68', '#6AC4DC', '#FF8C00', '#32CD32',
+      '#FFB6C1', '#DDA0DD', '#98FB98', '#F0E68C', '#87CEEB', '#FFA07A',
+      '#20B2AA', '#87CEFA', '#778899', '#B0C4DE', '#FFFFE0', '#00CED1',
+      '#40E0D0', '#EE82EE', '#90EE90', '#FFB347', '#FF69B4', '#BA55D3',
+      '#CD853F', '#FFA500', '#A0522D', '#C0C0C0', '#808080', '#FF4500',
+      '#2E8B57', '#4682B4'
+    ];
+
+    if (index < baseColors.length) {
+      return baseColors[index];
+    }
+
+    // For algorithms beyond the base palette, generate colors using HSL
+    const hue = (index * 137.508) % 360; // Golden angle for good distribution
+    const saturation = 65 + (index % 3) * 15; // Vary saturation: 65%, 80%, 95%
+    const lightness = 50 + (index % 4) * 10; // Vary lightness: 50%, 60%, 70%, 80%
+
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  };
+
+  // All algorithms data (no limit for overview and algorithm type tab)
+  const algorithmData = Object.entries(resultData.algorithmCounts)
+    .map(([algo, count], index) => ({
+      name: algo,
+      count,
+      percentage: (count / totalCount) * 100,
+      color: generateColor(index)
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  // Top 4 for circular chart only
+  const topAlgorithmsForChart = algorithmData.slice(0, 4);
+
   const handleSaveCsv = async () => {
     if (window.electronAPI) {
       const csvData = generateCsvData(result);
@@ -47,6 +142,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
       setHoveredSegment(null);
     };
 
+    // Calculate stroke dash arrays for circle segments
+    const circumference = 2 * Math.PI * 70; // radius = 70
+    let cumulativeOffset = 0;
+
     return (
       <div style={{
         position: 'relative',
@@ -65,42 +164,27 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             fill="rgba(247, 247, 247, 0.6)"
             opacity="0.3"
           />
-          <circle
-            cx="100" cy="100" r="70"
-            fill="none"
-            stroke="#5856D6"
-            strokeWidth="12"
-            strokeDasharray="200 440"
-            strokeDashoffset="0"
-            transform="rotate(-90 100 100)"
-            style={{ cursor: 'pointer' }}
-            onMouseEnter={() => handleMouseEnter('RSA: 60%')}
-            onMouseLeave={handleMouseLeave}
-          />
-          <circle
-            cx="100" cy="100" r="70"
-            fill="none"
-            stroke="#00C0E8"
-            strokeWidth="12"
-            strokeDasharray="80 440"
-            strokeDashoffset="-200"
-            transform="rotate(-90 100 100)"
-            style={{ cursor: 'pointer' }}
-            onMouseEnter={() => handleMouseEnter('ECC: 10%')}
-            onMouseLeave={handleMouseLeave}
-          />
-          <circle
-            cx="100" cy="100" r="70"
-            fill="none"
-            stroke="#0088FF"
-            strokeWidth="12"
-            strokeDasharray="120 440"
-            strokeDashoffset="-280"
-            transform="rotate(-90 100 100)"
-            style={{ cursor: 'pointer' }}
-            onMouseEnter={() => handleMouseEnter('AES: 30%')}
-            onMouseLeave={handleMouseLeave}
-          />
+          {algorithmData.map((algo, index) => {
+            const strokeLength = (algo.percentage / 100) * circumference;
+            const currentOffset = cumulativeOffset;
+            cumulativeOffset += strokeLength;
+
+            return (
+              <circle
+                key={algo.name}
+                cx="100" cy="100" r="70"
+                fill="none"
+                stroke={algo.color}
+                strokeWidth="12"
+                strokeDasharray={`${strokeLength} ${circumference}`}
+                strokeDashoffset={-currentOffset}
+                transform="rotate(-90 100 100)"
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={() => handleMouseEnter(`${algo.name}: ${algo.percentage.toFixed(1)}%`)}
+                onMouseLeave={handleMouseLeave}
+              />
+            );
+          })}
         </svg>
 
         {/* Center Text */}
@@ -135,22 +219,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
     );
   };
 
-  // Generate bar chart data based on overview algorithms
+  // Generate bar chart data based on actual algorithm counts
   const generateBarChartData = () => {
-    // Sample data based on overview - in real implementation, this would come from backend
-    const algorithms = [
-      { name: 'RSA', count: 23, color: '#5856D6' },
-      { name: 'AES-128', count: 9, color: '#0088FF' },
-      { name: 'ECC', count: 15, color: '#00C0E8' },
-      { name: 'MD5', count: 21, color: '#FF6B35' },
-      { name: 'DSA', count: 4, color: '#32D74B' },
-      { name: '3DES', count: 14, color: '#FFD60A' },
-      { name: 'SEED', count: 26, color: '#FF453A' }
-    ];
+    const maxCount = Math.max(...algorithmData.map(algo => algo.count));
 
-    const maxCount = Math.max(...algorithms.map(algo => algo.count));
-
-    return algorithms.map(algo => ({
+    return algorithmData.map(algo => ({
       ...algo,
       percentage: (algo.count / maxCount) * 100
     }));
@@ -169,83 +242,113 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <div style={{
+            {/* Combined container for counters and bars */}
+            <div className="chart-container" style={{
               display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'center',
-              height: '160px',
-              gap: '30px',
-              paddingBottom: '5px',
+              flexDirection: 'column',
+              alignItems: 'center',
               width: '100%',
-              maxWidth: '600px',
-              marginTop: '30px'
+              height: '200px',
+              marginTop: '25px'
             }}>
-              {chartData.map((algo, index) => (
-                <div key={algo.name} style={{
+              {/* Scrollable container */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: chartData.length <= 7 ? 'center' : 'flex-start',
+                width: '100%',
+                maxWidth: chartData.length <= 7 ? 'auto' : 'calc(7 * (80px + 50px) - 50px)',
+                overflowX: chartData.length > 7 ? 'auto' : 'visible',
+                overflowY: 'hidden',
+                paddingRight: chartData.length > 7 ? '10px' : '0',
+                height: '170px',
+                paddingBottom: '30px'
+              }}>
+                {/* Inner content that scrolls together */}
+                <div style={{
                   display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
+                  alignItems: 'flex-end',
+                  gap: '50px',
+                  minWidth: chartData.length > 7 ? `calc(${chartData.length} * (80px + 50px) - 50px)` : 'auto',
                   height: '100%'
                 }}>
-                  {/* Count label on top */}
-                  <div style={{
-                    position: 'absolute',
-                    transform: 'translateY(-25px)',
-                    background: `linear-gradient(145deg, ${algo.color}CC, ${algo.color}FF)`,
-                    backdropFilter: 'blur(10px)',
-                    borderRadius: '50%',
-                    width: '30px',
-                    height: '30px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    color: '#FFFFFF',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.2)'
-                  }}>
-                    {algo.count}
-                  </div>
+                  {chartData.map((algo, index) => (
+                    <div key={algo.name} style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      height: '100%',
+                      minWidth: '80px',
+                      flexShrink: 0,
+                      position: 'relative'
+                    }}>
+                      {/* Count label positioned above bar */}
+                      <div style={{
+                        background: `linear-gradient(145deg, ${algo.color}CC, ${algo.color}FF)`,
+                        backdropFilter: 'blur(10px)',
+                        borderRadius: '50%',
+                        width: '30px',
+                        height: '30px',
+                        minWidth: '30px',
+                        minHeight: '30px',
+                        maxWidth: '30px',
+                        maxHeight: '30px',
+                        aspectRatio: '1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        color: '#FFFFFF',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.2)',
+                        marginBottom: '5px'
+                      }}>
+                        {algo.count}
+                      </div>
 
-                  {/* Bar with liquid glass effect */}
-                  <div style={{
-                    width: '60px',
-                    height: `${algo.percentage}%`,
-                    background: `linear-gradient(145deg, ${algo.color}50, ${algo.color}90)`,
-                    backdropFilter: 'blur(20px)',
-                    borderRadius: '12px 12px 6px 6px',
-                    marginTop: 'auto',
-                    transition: 'all 0.3s ease',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    boxShadow: '0px 8px 16px rgba(0, 0, 0, 0.2), inset 2px 2px 4px rgba(255, 255, 255, 0.1), inset -2px -2px 4px rgba(0, 0, 0, 0.1)',
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}>
-                    {/* Inner glow effect */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '0',
-                      left: '0',
-                      right: '0',
-                      height: '30%',
-                      background: `linear-gradient(180deg, ${algo.color}30, transparent)`,
-                      borderRadius: '12px 12px 0 0'
-                    }} />
-                  </div>
+                      {/* Bar with liquid glass effect */}
+                      <div style={{
+                        width: '60px',
+                        height: `${algo.percentage}%`,
+                        background: `linear-gradient(145deg, ${algo.color}50, ${algo.color}90)`,
+                        backdropFilter: 'blur(20px)',
+                        borderRadius: '12px 12px 6px 6px',
+                        transition: 'all 0.3s ease',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        boxShadow: '0px 8px 16px rgba(0, 0, 0, 0.2), inset 2px 2px 4px rgba(255, 255, 255, 0.1), inset -2px -2px 4px rgba(0, 0, 0, 0.1)',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        marginTop: 'auto'
+                      }}>
+                        {/* Inner glow effect */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '0',
+                          left: '0',
+                          right: '0',
+                          height: '30%',
+                          background: `linear-gradient(180deg, ${algo.color}30, transparent)`,
+                          borderRadius: '12px 12px 0 0'
+                        }} />
+                      </div>
 
-                  {/* Algorithm name */}
-                  <div style={{
-                    fontFamily: 'SF Pro',
-                    fontSize: '12px',
-                    color: '#FFFFFF',
-                    marginTop: '8px',
-                    fontWeight: '500'
-                  }}>
-                    {algo.name}
-                  </div>
+                      {/* Algorithm name */}
+                      <div style={{
+                        fontFamily: 'SF Pro',
+                        fontSize: '12px',
+                        color: '#FFFFFF',
+                        fontWeight: '500',
+                        marginTop: '8px',
+                        textAlign: 'center',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {algo.name}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         );
@@ -257,14 +360,17 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            height: '300px'
+            height: '100%',
+            width: '100%',
+            padding: '30px'
           }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '60px', marginBottom: '16px' }}>🔧</div>
               <p style={{
                 color: 'rgba(255, 255, 255, 0.6)',
                 fontSize: '18px',
-                fontFamily: 'SF Pro'
+                fontFamily: 'SF Pro',
+                margin: 0
               }}>Preparing...</p>
             </div>
           </div>
@@ -324,6 +430,12 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
         @media (min-width: 1400px) {
           .overview-container {
             width: calc(3 * clamp(304px, 24vw, 371px) + 2 * clamp(20px, 2.15vw, 40px));
+          }
+        }
+
+        @media (min-width: 1400px) {
+          .chart-container {
+            margin-top: 40px !important;
           }
         }
       `}</style>
@@ -456,7 +568,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
               fontWeight: 700,
               fontSize: '32px',
               color: '#FFFFFF'
-            }}>6,789</div>
+            }}>{resultData.nonPqcCount.toLocaleString()}</div>
           </div>
         </div>
 
@@ -500,7 +612,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
               fontWeight: 700,
               fontSize: '32px',
               color: '#FFFFFF'
-            }}>234</div>
+            }}>{resultData.fileCount}</div>
           </div>
         </div>
 
@@ -544,7 +656,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
               fontWeight: 700,
               fontSize: '32px',
               color: '#FFFFFF'
-            }}>High</div>
+            }}>{resultData.riskLevel}</div>
           </div>
         </div>
 
@@ -678,41 +790,45 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             padding: 'clamp(20px, 3vh, 30px)',
             position: 'relative',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center'
           }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(max-content, 1fr))',
               gap: '15px',
-              alignContent: 'center',
-              justifyItems: 'center'
+              alignContent: 'flex-start',
+              justifyItems: 'center',
+              width: '100%',
+              maxHeight: '100%',
+              overflowY: 'auto',
+              paddingRight: '5px'
             }}>
-              {[
-                { name: 'RSA', color: '#5856D6' },
-                { name: 'AES', color: '#0088FF' },
-                { name: 'ECC', color: '#00C0E8' },
-                { name: 'ETC', color: '#9599AB' }
-              ].map(algo => (
+              {algorithmData.map((algo, index) => (
                 <div key={algo.name} style={{
                   display: 'flex',
                   alignItems: 'center',
-                  padding: '16px',
+                  padding: '12px 16px',
                   background: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: '18px',
-                  gap: '12px'
+                  gap: '12px',
+                  minWidth: 'max-content',
+                  width: '100%',
+                  justifyContent: 'flex-start'
                 }}>
                   <div style={{
-                    width: '25px',
-                    height: '25px',
+                    width: '20px',
+                    height: '20px',
                     background: algo.color,
-                    borderRadius: '999px'
+                    borderRadius: '999px',
+                    flexShrink: 0
                   }} />
                   <span style={{
                     fontFamily: 'SF Pro Rounded',
                     fontWeight: 700,
-                    fontSize: '16px',
-                    color: '#000000'
+                    fontSize: '14px',
+                    color: '#000000',
+                    whiteSpace: 'nowrap'
                   }}>{algo.name}</span>
                 </div>
               ))}

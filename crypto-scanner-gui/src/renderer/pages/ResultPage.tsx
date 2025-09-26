@@ -163,10 +163,10 @@ const ResultPage: React.FC<ResultPageProps> = ({
           width: 'clamp(300px, 22vw, 371px)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 'clamp(15px, 2vh, 20px)',
-          maxHeight: 'calc(4 * (100px + clamp(15px, 2vh, 20px)) - clamp(15px, 2vh, 20px))',
-          overflowY: sortedDates.length > 4 ? 'auto' : 'visible',
-          paddingRight: sortedDates.length > 4 ? '10px' : '0'
+          gap: 'clamp(15px, 2vh, 34px)',
+          maxHeight: 'calc(3 * 100px + 2 * clamp(15px, 2vh, 34px))',
+          overflowY: sortedDates.length > 3 ? 'auto' : 'visible',
+          paddingRight: sortedDates.length > 3 ? '10px' : '0'
         }}>
           {sortedDates.map(date => {
             const resultsForDate = groupedResults[date];
@@ -178,6 +178,8 @@ const ResultPage: React.FC<ResultPageProps> = ({
                 style={{
                   position: 'relative',
                   height: '100px',
+                  minHeight: '100px',
+                  flexShrink: 0,
                   background: isSelected ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.1)',
                   border: '1px solid rgba(255, 255, 255, 0.2)',
                   borderRadius: '18px',
@@ -249,6 +251,8 @@ const ResultPage: React.FC<ResultPageProps> = ({
             <div style={{
               position: 'relative',
               height: '100px',
+              minHeight: '100px',
+              flexShrink: 0,
               background: 'rgba(255, 255, 255, 0.1)',
               border: '1px solid rgba(255, 255, 255, 0.2)',
               borderRadius: '18px',
