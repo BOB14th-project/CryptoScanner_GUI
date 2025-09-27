@@ -338,6 +338,11 @@ static inline size_t disassembleWithCandidatesPE(const std::string& arch, const 
             wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
             if(wrote) return wrote;
         }
+        // Try macOS homebrew llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
         for(const char* s: sections){
             wrote = tryCmdSectionChecked("objdump -d -M intel -b pei-i386", filePath, s, outAsm);
             if(wrote) return wrote;
@@ -345,6 +350,9 @@ static inline size_t disassembleWithCandidatesPE(const std::string& arch, const 
         wrote = tryCmdChecked(std::string("i686-w64-mingw32-objdump -d -M intel ") + q(filePath), outAsm);
         if(wrote) return wrote;
         wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+        // Try macOS homebrew llvm-objdump
+        wrote = tryCmdChecked(std::string("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
         if(wrote) return wrote;
         wrote = tryCmdChecked(std::string("objdump -d -M intel -b pei-i386 ") + q(filePath), outAsm);
         if(wrote) return wrote;
@@ -361,6 +369,11 @@ static inline size_t disassembleWithCandidatesPE(const std::string& arch, const 
             wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
             if(wrote) return wrote;
         }
+        // Try macOS homebrew llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
         for(const char* s: sections){
             wrote = tryCmdSectionChecked("objdump -d -M intel -b pei-x86-64", filePath, s, outAsm);
             if(wrote) return wrote;
@@ -368,6 +381,9 @@ static inline size_t disassembleWithCandidatesPE(const std::string& arch, const 
         wrote = tryCmdChecked(std::string("x86_64-w64-mingw32-objdump -d -M intel ") + q(filePath), outAsm);
         if(wrote) return wrote;
         wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+        // Try macOS homebrew llvm-objdump
+        wrote = tryCmdChecked(std::string("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
         if(wrote) return wrote;
         wrote = tryCmdChecked(std::string("objdump -d -M intel -b pei-x86-64 ") + q(filePath), outAsm);
         if(wrote) return wrote;
@@ -380,7 +396,15 @@ static inline size_t disassembleWithCandidatesPE(const std::string& arch, const 
             wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn", filePath, s, outAsm);
             if(wrote) return wrote;
         }
+        // Try macOS homebrew llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
         wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+        // Try macOS homebrew llvm-objdump
+        wrote = tryCmdChecked(std::string("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn ") + q(filePath), outAsm);
         return wrote;
     }
 }
@@ -399,7 +423,15 @@ static inline size_t disassembleWithCandidatesELF(const std::string& arch, const
             wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
             if(wrote) return wrote;
         }
+        // Try macOS homebrew llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
         wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+        // Try macOS homebrew llvm-objdump
+        wrote = tryCmdChecked(std::string("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
         return wrote;
     }else{
         for(const char* s: sections){
@@ -412,7 +444,15 @@ static inline size_t disassembleWithCandidatesELF(const std::string& arch, const
             wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn", filePath, s, outAsm);
             if(wrote) return wrote;
         }
+        // Try macOS homebrew llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
         wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+        // Try macOS homebrew llvm-objdump
+        wrote = tryCmdChecked(std::string("/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn ") + q(filePath), outAsm);
         return wrote;
     }
 }

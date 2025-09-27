@@ -35,6 +35,10 @@ int main(int argc, char* argv[]) {
             std::cout << "PROGRESS:START:" << targetPath << std::endl;
             results = scanner.scanPathRecursive(targetPath);
             std::cout << "PROGRESS:COMPLETE:" << targetPath << std::endl;
+
+            // For directory scans, detections are already output in real-time
+            // Skip the detection output loop to avoid duplicates
+            goto skip_detection_output;
         } else {
             std::cerr << "Error: Invalid path type: " << targetPath << std::endl;
             return 1;
@@ -51,6 +55,8 @@ int main(int argc, char* argv[]) {
                       << detection.evidenceType << ","
                       << detection.severity << std::endl;
         }
+
+skip_detection_output:
 
         // Summary
         std::cout << "SUMMARY:TOTAL:" << results.size() << std::endl;

@@ -98,20 +98,42 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
       console.log('process.resourcesPath:', process.resourcesPath);
       console.log('__dirname:', __dirname);
 
-      // Set working directory to where patterns.json is located
-      let cryptoScannerDir;
+      // Set working directory to the original CryptoScanner source folder
+      // This ensures result folder is created in the expected location
+      let cryptoScannerDir = '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner';
+      let patternsPath = '';
 
-      if (process.resourcesPath) {
-        // In packaged app, patterns.json is in the same directory as the CLI binary
-        cryptoScannerDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main');
-      } else {
-        // In development, use the CryptoScanner source directory
-        cryptoScannerDir = path.resolve(__dirname, '..', '..', '..', 'CryptoScanner');
-      }
-
-      // Fallback to absolute path if patterns.json not found
+      // Verify that the CryptoScanner directory exists and has patterns.json
       if (!require('fs').existsSync(path.join(cryptoScannerDir, 'patterns.json'))) {
-        cryptoScannerDir = '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner';
+        console.error('patterns.json not found in:', cryptoScannerDir);
+        // For packaged app, copy patterns.json to the original location if it doesn't exist
+        if (process.resourcesPath) {
+          const packagedPatternsPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', 'patterns.json');
+          const targetPatternsPath = path.join(cryptoScannerDir, 'patterns.json');
+
+          try {
+            // Create the directory if it doesn't exist
+            if (!require('fs').existsSync(cryptoScannerDir)) {
+              require('fs').mkdirSync(cryptoScannerDir, { recursive: true });
+            }
+            // Copy patterns.json to the target location
+            if (require('fs').existsSync(packagedPatternsPath)) {
+              require('fs').copyFileSync(packagedPatternsPath, targetPatternsPath);
+              console.log('Copied patterns.json to:', targetPatternsPath);
+            }
+          } catch (error) {
+            console.error('Failed to copy patterns.json:', error);
+          }
+        }
+
+        // If still not available, fall back to packaged location
+        if (!require('fs').existsSync(path.join(cryptoScannerDir, 'patterns.json'))) {
+          if (process.resourcesPath) {
+            cryptoScannerDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main');
+          } else {
+            cryptoScannerDir = path.resolve(__dirname, '..', '..', '..', 'CryptoScanner');
+          }
+        }
       }
 
       console.log('About to spawn process:');
@@ -161,14 +183,16 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
               }
 
               // Send progress updates to renderer
-              mainWindow.webContents.send('scan-progress', {
+              const progressData = {
                 type: 'progress',
                 currentFile: currentFile || 'Scanning...',
                 filesDone: scannedFiles,
                 filesTotal: totalFiles,
                 percentage: totalFiles > 0 ? Math.round((scannedFiles / totalFiles) * 100) : 0,
                 detectionCount: detections.length
-              });
+              };
+              console.log('Main process sending progress:', progressData);
+              mainWindow.webContents.send('scan-progress', progressData);
             } else if (line.startsWith('DETECTION:')) {
               // Parse detection: DETECTION:filePath,offset,algorithm,matchString,evidenceType,severity
               const detectionData = line.substring(10); // Remove 'DETECTION:' prefix
@@ -187,14 +211,16 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                 console.log('Added detection:', detection);
 
                 // Send updated detection count
-                mainWindow.webContents.send('scan-progress', {
+                const progressData = {
                   type: 'progress',
                   currentFile: currentFile || 'Scanning...',
                   filesDone: scannedFiles,
                   filesTotal: totalFiles,
                   percentage: totalFiles > 0 ? Math.round((scannedFiles / totalFiles) * 100) : 0,
                   detectionCount: detections.length
-                });
+                };
+                console.log('Main process sending detection update:', progressData);
+                mainWindow.webContents.send('scan-progress', progressData);
               }
             } else if (line.startsWith('SUMMARY:')) {
               // Handle summary information
@@ -229,6 +255,53 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
         console.log(`Output length: ${output.length}`);
         console.log(`Detections found: ${detections.length}`);
         console.log('Detections:', detections);
+
+        // For packaged apps, move result files from package location to user-accessible location
+        if (process.resourcesPath && code === 0) {
+          try {
+            const packagedResultDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', 'result');
+            const targetResultDir = '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner/result';
+
+            if (require('fs').existsSync(packagedResultDir)) {
+              console.log('Moving result files from package to user location...');
+              console.log('From:', packagedResultDir);
+              console.log('To:', targetResultDir);
+
+              // Ensure target directory exists
+              if (!require('fs').existsSync(targetResultDir)) {
+                require('fs').mkdirSync(targetResultDir, { recursive: true });
+              }
+
+              // Copy all files from packaged result to target result
+              const fs = require('fs');
+              const copyDirRecursive = (src: string, dest: string) => {
+                const entries = fs.readdirSync(src, { withFileTypes: true });
+                for (const entry of entries) {
+                  const srcPath = path.join(src, entry.name);
+                  const destPath = path.join(dest, entry.name);
+
+                  if (entry.isDirectory()) {
+                    if (!fs.existsSync(destPath)) {
+                      fs.mkdirSync(destPath, { recursive: true });
+                    }
+                    copyDirRecursive(srcPath, destPath);
+                  } else {
+                    fs.copyFileSync(srcPath, destPath);
+                    console.log('Copied:', entry.name);
+                  }
+                }
+              };
+
+              copyDirRecursive(packagedResultDir, targetResultDir);
+
+              // Clean up packaged result directory
+              fs.rmSync(packagedResultDir, { recursive: true, force: true });
+              console.log('Result files moved successfully!');
+            }
+          } catch (error) {
+            console.error('Failed to move result files:', error);
+          }
+        }
 
         if (code === 0) {
           resolve({
