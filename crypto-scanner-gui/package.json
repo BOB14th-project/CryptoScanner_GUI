@@ -5,8 +5,7 @@
   "main": "dist/main/main.js",
   "scripts": {
     "build-renderer": "webpack --mode=production",
-    "build-main": "tsc --project tsconfig.main.json && npm run build-backend",
-    "build-backend": "node -e \"const os = require('os'); const { execSync } = require('child_process'); if (os.platform() === 'win32') { console.log('Building C++ backend for Windows...'); execSync('cd ..\\\\CryptoScanner && build_cli_only.bat && copy CryptoScannerCLI.exe ..\\\\crypto-scanner-gui\\\\dist\\\\main\\\\CryptoScanner.exe && copy patterns.json ..\\\\crypto-scanner-gui\\\\dist\\\\main\\\\patterns.json', {stdio: 'inherit'}); } else { execSync('cd ../CryptoScanner && ./build_cli_only.sh && cp CryptoScannerCLI ../crypto-scanner-gui/dist/main/CryptoScanner && cp patterns.json ../crypto-scanner-gui/dist/main/patterns.json && chmod +x ../crypto-scanner-gui/dist/main/CryptoScanner', {stdio: 'inherit'}); }\"",
+    "build-main": "tsc --project tsconfig.main.json",
     "build-preload": "tsc --project tsconfig.preload.json",
     "build": "npm run build-renderer && npm run build-main && npm run build-preload",
     "dev-renderer": "webpack serve --mode=development",
