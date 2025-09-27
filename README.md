@@ -74,10 +74,51 @@ cd ../linux-arm
 
 ## 💻 Windows
 
-### 1️⃣ …
+### 1️⃣ 의존성 설치
 
 ```bash
+# Chocolatey 설치 (PowerShell 관리자 권한으로 실행)
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
+# 필요한 패키지 설치
+choco install nodejs git visualstudio2019buildtools vcredist140 -y
+
+# Qt 설치 (Qt 온라인 설치 프로그램으로 Qt5 설치)
+# https://www.qt.io/download-qt-installer 에서 다운로드 후 Qt 5.15.x 설치
+```
+
+### 2️⃣ 저장소 복제
+
+```bash
+# 저장소 설치
+git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
+```
+
+### 3️⃣ npm 설치
+
+```bash
+cd CryptoScanner_GUI/crypto-scanner-gui
+
+# npm 명령어
+npm install
+```
+
+### 4️⃣ GUI 설치 및 실행 - **AMD64**
+
+```bash
+npm run dist:win-amd
+
+cd ../win-amd
+./crypto-scanner-gui.exe
+```
+
+### 5️⃣ GUI 설치 및 실행 - **ARM64**
+
+```bash
+npm run dist:win-arm
+
+cd ../win-arm
+./crypto-scanner-gui.exe
 ```
 
 <br />
