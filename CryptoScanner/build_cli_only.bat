@@ -40,12 +40,13 @@ set QT_DIR=
 
 REM Check common Qt installation paths
 for %%i in (
-    "C:\Qt\5.15.2\mingw81_64"
     "C:\Qt\5.15.2\msvc2019_64"
     "C:\Qt\Qt5.15.2\5.15.2\msvc2019_64"
+    "C:\Qt\5.15.2\mingw81_64"
     "C:\Qt\5.15.1\msvc2019_64"
     "C:\Qt\6.5.0\msvc2019_64"
     "C:\Qt\6.6.0\msvc2019_64"
+    "C:\Program Files\Qt\Qt5.15.2\5.15.2\msvc2019_64"
 ) do (
     if exist "%%~i\include\QtCore" (
         set QT_DIR=%%~i

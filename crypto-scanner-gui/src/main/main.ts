@@ -280,12 +280,11 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
       scannerProcess = spawn(finalScannerPath, [scanOptions.path], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: cryptoScannerDir, // Set working directory to CryptoScanner folder
+        windowsHide: false, // Show console window for debugging
+        shell: false, // Don't use shell
         env: {
           ...process.env,
-          DYLD_LIBRARY_PATH: '/opt/homebrew/lib',
-          DYLD_FALLBACK_LIBRARY_PATH: '/opt/homebrew/lib',
-          PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH || ''),
-          DISPLAY: ':0'
+          PATH: process.env.PATH || ''
         }
       });
 
@@ -455,6 +454,10 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
       scannerProcess.on('error', (error) => {
         console.error('Scanner process error:', error);
+        console.error('Error code:', (error as any).code);
+        console.error('Error errno:', (error as any).errno);
+        console.error('Error syscall:', (error as any).syscall);
+        console.error('Error path:', (error as any).path);
         reject(error);
         scannerProcess = null;
       });
