@@ -177,9 +177,29 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
   const topAlgorithmsForChart = algorithmData.slice(0, 4);
 
   const handleSaveCsv = async () => {
-    if (window.electronAPI) {
+    console.log('handleSaveCsv called');
+    console.log('window.electronAPI:', window.electronAPI);
+
+    if (!window.electronAPI) {
+      console.error('electronAPI not available for CSV save');
+      alert('electronAPI not available for CSV save');
+      return;
+    }
+
+    try {
       const csvData = generateCsvData(result);
-      await window.electronAPI.saveCsv(csvData);
+      console.log('Generated CSV data length:', csvData.length);
+      const saveResult = await window.electronAPI.saveCsv(csvData);
+      console.log('Save result:', saveResult);
+
+      if (saveResult.success) {
+        alert(`CSV saved successfully to: ${saveResult.path}`);
+      } else {
+        alert(`Failed to save CSV: ${saveResult.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to save CSV:', error);
+      alert(`Failed to save CSV: ${error}`);
     }
   };
 
