@@ -37,10 +37,10 @@ function createWindow(): void {
     height: 800,
     width: 1200,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
+      nodeIntegration: true,
+      contextIsolation: false,
       preload: preloadPath,
-      webSecurity: true,
+      webSecurity: false,
     },
     titleBarStyle: 'hiddenInset',
     show: false, // Don't show until ready
