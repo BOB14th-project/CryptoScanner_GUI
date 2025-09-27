@@ -100,7 +100,27 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
       // Set working directory to the original CryptoScanner source folder
       // This ensures result folder is created in the expected location
-      let cryptoScannerDir = '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner';
+      // Use dynamic path resolution for cross-platform support
+      let cryptoScannerDir: string;
+
+      if (process.resourcesPath) {
+        // For packaged app, try to find CryptoScanner directory relative to the app
+        const possiblePaths = [
+          path.resolve(process.resourcesPath, '..', '..', '..', 'CryptoScanner'),
+          path.resolve(process.resourcesPath, '..', '..', 'CryptoScanner'),
+          path.resolve(process.resourcesPath, '..', 'CryptoScanner'),
+          '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner', // macOS fallback
+          '/home/kali/Desktop/CryptoScanner_GUI/CryptoScanner', // Kali fallback
+        ];
+
+        cryptoScannerDir = possiblePaths.find(p => require('fs').existsSync(p)) || possiblePaths[0];
+        console.log('Packaged app - Possible CryptoScanner paths:', possiblePaths);
+        console.log('Selected CryptoScanner directory:', cryptoScannerDir);
+      } else {
+        // For development mode, use relative path from the project
+        cryptoScannerDir = path.resolve(__dirname, '..', '..', '..', 'CryptoScanner');
+        console.log('Development mode - CryptoScanner directory:', cryptoScannerDir);
+      }
       let patternsPath = '';
 
       // Verify that the CryptoScanner directory exists and has patterns.json
@@ -260,7 +280,7 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
         if (process.resourcesPath && code === 0) {
           try {
             const packagedResultDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', 'result');
-            const targetResultDir = '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner/result';
+            const targetResultDir = path.join(cryptoScannerDir, 'result');
 
             if (require('fs').existsSync(packagedResultDir)) {
               console.log('Moving result files from package to user location...');
