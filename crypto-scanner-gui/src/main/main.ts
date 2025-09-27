@@ -105,16 +105,33 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
       if (process.resourcesPath) {
         // For packaged app, try to find CryptoScanner directory relative to the app
-        const possiblePaths = [
-          path.resolve(process.resourcesPath, '..', '..', '..', 'CryptoScanner'),
-          path.resolve(process.resourcesPath, '..', '..', 'CryptoScanner'),
-          path.resolve(process.resourcesPath, '..', 'CryptoScanner'),
-          '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner', // macOS fallback
-          '/home/kali/Desktop/CryptoScanner_GUI/CryptoScanner', // Kali fallback
-        ];
+        // Start from app location and work upwards to find CryptoScanner_GUI/CryptoScanner
+        let searchPath = process.resourcesPath;
+        let cryptoScannerFound = false;
 
-        cryptoScannerDir = possiblePaths.find(p => require('fs').existsSync(p)) || possiblePaths[0];
-        console.log('Packaged app - Possible CryptoScanner paths:', possiblePaths);
+        // Try to go up directories to find CryptoScanner_GUI folder
+        for (let i = 0; i < 5; i++) {
+          searchPath = path.dirname(searchPath);
+          const testPath = path.join(searchPath, 'CryptoScanner');
+          const testPath2 = path.join(searchPath, 'CryptoScanner_GUI', 'CryptoScanner');
+
+          if (require('fs').existsSync(path.join(testPath, 'patterns.json'))) {
+            cryptoScannerDir = testPath;
+            cryptoScannerFound = true;
+            break;
+          } else if (require('fs').existsSync(path.join(testPath2, 'patterns.json'))) {
+            cryptoScannerDir = testPath2;
+            cryptoScannerFound = true;
+            break;
+          }
+        }
+
+        if (!cryptoScannerFound) {
+          // Fallback to relative path from app location
+          cryptoScannerDir = path.resolve(process.resourcesPath, '..', '..', '..', 'CryptoScanner');
+        }
+
+        console.log('Packaged app - Search started from:', process.resourcesPath);
         console.log('Selected CryptoScanner directory:', cryptoScannerDir);
       } else {
         // For development mode, use relative path from the project
