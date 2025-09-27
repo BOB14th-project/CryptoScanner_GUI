@@ -8,6 +8,7 @@ interface AnalyzePageProps {
 
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Parse CSV data to extract statistics
   const parseResultData = () => {
@@ -55,11 +56,82 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
       fileCount,
       riskLevel,
       algorithmCounts,
-      severityCounts
+      severityCounts,
+      detections
     };
   };
 
   const resultData = parseResultData();
+
+  // Filter detections based on search query
+  const filteredDetections = resultData.detections.filter(detection => {
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase();
+    return (
+      detection.filePath.toLowerCase().includes(query) ||
+      detection.algorithm.toLowerCase().includes(query) ||
+      detection.matchString.toLowerCase().includes(query) ||
+      detection.evidenceType.toLowerCase().includes(query) ||
+      detection.severity.toLowerCase().includes(query) ||
+      detection.offset.toString().includes(query)
+    );
+  });
+
+  // Highlight search terms in text
+  const highlightText = (text: string, query: string) => {
+    if (!query.trim()) return text;
+
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+
+    return parts.map((part, index) => {
+      if (part.toLowerCase() === query.toLowerCase()) {
+        return <span key={index} style={{
+          background: 'rgba(255, 255, 0, 0.3)',
+          padding: '1px 2px',
+          borderRadius: '2px',
+          fontWeight: 'bold'
+        }}>{part}</span>;
+      }
+      return part;
+    });
+  };
+
+  // CSV download function
+  const downloadCSV = () => {
+    console.log('Downloading CSV with detections:', resultData.detections);
+    console.log('Sample detection:', resultData.detections[0]);
+
+    const headers = ['File Path', 'Algorithm', 'Evidence Type', 'Severity', 'Match String', 'Offset'];
+    const csvContent = [
+      headers.join(','),
+      ...resultData.detections.map(detection => {
+        const row = [
+          `"${detection.filePath}"`,
+          `"${detection.algorithm}"`,
+          `"${detection.evidenceType}"`,
+          `"${detection.severity}"`,
+          `"${detection.matchString}"`,
+          detection.offset?.toString() || '0'
+        ];
+        console.log('CSV row:', row);
+        return row.join(',');
+      })
+    ].join('\n');
+
+    console.log('Final CSV content:', csvContent);
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `CryptoScan_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Calculate algorithm data and colors for use across components
   const totalCount = Object.values(resultData.algorithmCounts).reduce((sum, count) => sum + count, 0);
@@ -112,13 +184,14 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
   };
 
   const generateCsvData = (result: ScanResult): string => {
-    const headers = ['File Path', 'Algorithm', 'Evidence Type', 'Severity', 'Match String'];
+    const headers = ['File Path', 'Algorithm', 'Evidence Type', 'Severity', 'Match String', 'Offset'];
     const rows = result.detections.map(detection => [
       detection.filePath,
       detection.algorithm,
       detection.evidenceType,
       detection.severity,
-      detection.matchString.replace(/"/g, '""')
+      detection.matchString.replace(/"/g, '""'),
+      detection.offset.toString()
     ]);
 
     return [headers, ...rows]
@@ -353,7 +426,145 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
           </div>
         );
       case 'details':
-        return <div style={{ padding: '20px', color: '#FFFFFF' }}>Details content - file listings</div>;
+        return (
+          <div style={{
+            padding: '30px',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            {/* Search bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '4px'
+            }}>
+              <div style={{
+                position: 'relative',
+                flex: 1
+              }}>
+                <input
+                  type="text"
+                  placeholder="Search detections (file path, algorithm, match string, etc.)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 40px 10px 16px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '8px',
+                    color: '#FFFFFF',
+                    fontSize: '14px',
+                    fontFamily: 'SF Pro',
+                    outline: 'none',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                />
+                <div style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  fontSize: '16px'
+                }}>
+                  🔍
+                </div>
+              </div>
+
+              {/* Clear search button */}
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '6px',
+                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    fontFamily: 'SF Pro'
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Results counter */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '13px',
+              fontFamily: 'SF Pro'
+            }}>
+              <span>
+                Showing {filteredDetections.length} of {resultData.detections.length} detections
+                {searchQuery && ` for "${searchQuery}"`}
+              </span>
+              {searchQuery && filteredDetections.length === 0 && (
+                <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                  No matches found
+                </span>
+              )}
+            </div>
+
+            {/* Detection list */}
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '16px'
+            }}>
+              {filteredDetections.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {filteredDetections.map((detection, index) => (
+                    <div key={index} style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      fontSize: '12px',
+                      fontFamily: 'SF Pro',
+                      color: '#FFFFFF'
+                    }}>
+                      <div><strong>File:</strong> {highlightText(detection.filePath, searchQuery)}</div>
+                      <div><strong>Algorithm:</strong> {highlightText(detection.algorithm, searchQuery)}</div>
+                      <div><strong>Match:</strong> {highlightText(detection.matchString, searchQuery)}</div>
+                      <div><strong>Offset:</strong> {highlightText(detection.offset.toString(), searchQuery)}</div>
+                      <div><strong>Type:</strong> {highlightText(detection.evidenceType, searchQuery)}</div>
+                      <div><strong>Severity:</strong> {highlightText(detection.severity, searchQuery)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : resultData.detections.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '16px',
+                  fontFamily: 'SF Pro'
+                }}>
+                  No detections found
+                </div>
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '16px',
+                  fontFamily: 'SF Pro'
+                }}>
+                  No detections match your search
+                </div>
+              )}
+            </div>
+          </div>
+        );
       case 'llm':
         return (
           <div style={{

@@ -17,7 +17,13 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
   onCancel
 }) => {
   const [timeElapsed, setTimeElapsed] = useState(0);
-  const [mockProgress, setMockProgress] = useState(0);
+
+  // Debug: Log progress updates
+  useEffect(() => {
+    if (progress) {
+      console.log('LoadingPage received progress update:', progress);
+    }
+  }, [progress]);
 
   // Real timer starting from 0
   useEffect(() => {
@@ -28,26 +34,24 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Mock progress for demo
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMockProgress(prev => {
-        if (prev >= 100) return prev;
-        return prev + Math.random() * 2;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Use real progress data if available, otherwise show scanning state
+  // Use real progress data if available, otherwise show initial scanning state
   const currentProgress = progress || {
-    currentFile: scanType === 'folder' ? '/Users/Downloads/test/putty.exe' : scanType === 'file' ? '/Users/Downloads/test/putty.exe' : 'Scanning...',
-    filesDone: Math.floor((mockProgress / 100) * 54321),
-    filesTotal: 54321,
-    percentage: Math.min(Math.floor(mockProgress), 100),
-    timeRemaining: Math.max(0, Math.floor((270 * (100 - mockProgress)) / 100)),
+    currentFile: 'Initializing scan...',
+    filesDone: 0,
+    filesTotal: 0,
+    percentage: 0,
+    timeRemaining: 0,
     detectionCount: 0
+  };
+
+  // Calculate time remaining based on progress
+  const calculateTimeRemaining = () => {
+    if (!progress || !progress.percentage || progress.percentage <= 0) return 0;
+    if (progress.percentage >= 100) return 0;
+
+    const progressRate = progress.percentage / timeElapsed;
+    const remainingProgress = 100 - progress.percentage;
+    return Math.round(remainingProgress / progressRate);
   };
 
   const getScanTitle = () => {
@@ -276,7 +280,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
                 overflow: 'hidden'
               }}>
                 <div style={{
-                  width: `${currentProgress.percentage || 0}%`,
+                  width: `${Math.min(100, Math.max(0, currentProgress.percentage || 0))}%`,
                   height: '100%',
                   background: 'linear-gradient(90deg, #3B82F6 0%, #8B5CF6 100%)',
                   borderRadius: '4px',
@@ -294,7 +298,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
                 color: '#FFFFFF',
                 textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)'
               }}>
-                {currentProgress.percentage || 0}%
+                {Math.min(100, Math.max(0, currentProgress.percentage || 0))}%
               </div>
               {/* Time Info */}
               <div style={{
@@ -305,7 +309,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
                 color: 'rgba(255, 255, 255, 0.8)'
               }}>
                 <div>Time Elapsed: {formatDuration(timeElapsed)}</div>
-                <div>Time remaining: {formatDuration(currentProgress.timeRemaining || 0)}</div>
+                <div>Time remaining: {formatDuration(progress?.timeRemaining || calculateTimeRemaining())}</div>
               </div>
             </div>
 

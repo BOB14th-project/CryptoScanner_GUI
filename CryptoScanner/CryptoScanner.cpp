@@ -782,12 +782,46 @@ std::vector<Detection> CryptoScanner::scanPathRecursive(const std::string& rootP
         return out;
     }
     if (!fs::is_directory(rootPath, ec)) return out;
+
+    // First pass: count total files
+    int totalFiles = 0;
     for (fs::recursive_directory_iterator it(rootPath, fs::directory_options::skip_permission_denied, ec), end; it != end; ++it) {
         const auto& de = *it;
         if (!de.is_regular_file(ec)) continue;
-        auto v = scanFileDetailed(de.path().string());
-        out.insert(out.end(), v.begin(), v.end());
+        totalFiles++;
     }
+
+    // Second pass: scan files with progress reporting
+    int scannedFiles = 0;
+    for (fs::recursive_directory_iterator it(rootPath, fs::directory_options::skip_permission_denied, ec), end; it != end; ++it) {
+        const auto& de = *it;
+        if (!de.is_regular_file(ec)) continue;
+
+        std::string currentFile = de.path().string();
+
+        // Report progress before scanning each file
+        std::cout << "PROGRESS:FILE:" << currentFile << ":" << scannedFiles << ":" << totalFiles << std::endl;
+
+        auto v = scanFileDetailed(currentFile);
+        out.insert(out.end(), v.begin(), v.end());
+
+        // Output detections immediately as they are found
+        for (const auto& detection : v) {
+            std::cout << "DETECTION:"
+                      << detection.filePath << ","
+                      << detection.offset << ","
+                      << detection.algorithm << ","
+                      << detection.matchString << ","
+                      << detection.evidenceType << ","
+                      << detection.severity << std::endl;
+        }
+
+        scannedFiles++;
+
+        // Report progress after scanning each file
+        std::cout << "PROGRESS:FILE:" << currentFile << ":" << scannedFiles << ":" << totalFiles << std::endl;
+    }
+
     return out;
 }
 

@@ -108,6 +108,7 @@ const App: React.FC = () => {
   };
 
   const updateScanProgress = (progress: any) => {
+    console.log('App.tsx received scan progress:', progress);
     setAppState(prev => ({
       ...prev,
       scanProgress: progress
