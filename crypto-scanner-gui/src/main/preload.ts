@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { ipcRenderer, IpcRendererEvent } from 'electron';
 
 export interface ElectronAPI {
   selectFolder: () => Promise<string | null>;
@@ -20,7 +20,8 @@ const electronAPI: ElectronAPI = {
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
 };
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+// Since contextIsolation is false, directly assign to window
+(window as any).electronAPI = electronAPI;
 
 declare global {
   interface Window {
