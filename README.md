@@ -20,12 +20,16 @@ CryptoScanner_GUI/
             └── utils/       # 스토리지
 ```
 
+
+
 # **📋 시스템 요구사항**
+
 
 ## **📋** 공통 요구사항
 
 1. **Node.js**(v16 이상)
 2. **npm**
+
 
 ## **🍎** macOS 추가 요구사항
 
@@ -33,17 +37,22 @@ CryptoScanner_GUI/
 2. **Homebrew**
 3. **LLVM**
 
+
 ## 💻 Linux 추가 요구사항
 
 1. **build-essential** (Ubuntu/Debian) 또는 **gcc-c++** (CentOS/RHEL)
 2. **Qt5 개발 패키지**
 3. **OpenSSL 개발 패키지**
 
+
 ## 💻 Windows 추가 요구사항
 
 1. 추후 작성 예정
 
+
+
 # **🚀 설치 및 실행 가이드**
+
 
 ## 1️⃣ 저장소 복제
 
@@ -52,7 +61,9 @@ git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 cd CryptoScanner_GUI
 ```
 
+
 ## 2️⃣ 시스템별 의존성 설치
+
 
 ### **🍎 macOS**
 
@@ -66,6 +77,7 @@ brew install qt@5 openssl llvm
 # LLVM objdump 심볼릭 링크 생성
 sudo ln -sf /opt/homebrew/bin/llvm-objdump /opt/homebrew/bin/objdump
 ```
+
 
 ### **💻 Linux (Debian/Ubuntu)**
 
@@ -81,13 +93,16 @@ curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
+
 ### **💻 Windows**
 
 ```bash
 추후 작성 예정
 ```
 
+
 ## 3️⃣ 프로젝트 빌드
+
 
 ### **✅ CryptoScanner CLI 빌드**
 
@@ -95,6 +110,7 @@ sudo apt-get install -y nodejs
 cd CryptoScanner
 ./build_cli_only.sh
 ```
+
 
 ### **✅ Electron GUI 빌드**
 
@@ -104,7 +120,9 @@ npm install
 npm run build
 ```
 
+
 ## 4️⃣ 실행 방법
+
 
 ### 🍎 macOS
 
@@ -113,12 +131,14 @@ cd ../CryptoScanner_GUI/mac-arm64
 ./CryptoScanner.app
 ```
 
+
 ### **💻 Linux (Debian/Ubuntu - ARM)**
 
 ```bash
 cd ../CryptoScanner_GUI/linux-arm64-unpacked/
 ./crypto-scanner-gui
 ```
+
 
 ### **💻 Linux (Debian/Ubuntu - AMD)**
 
@@ -127,13 +147,17 @@ cd ../CryptoScanner_GUI/linux-unpacked/
 ./crypto-scanner-gui
 ```
 
+
 ### **💻 Windows**
 
 ```bash
 추후 작성 예정
 ```
 
+
+
 # 🖥️ 주요 기능
+
 
 ### **1️⃣ Start Page**
 
