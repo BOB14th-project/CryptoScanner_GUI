@@ -33,7 +33,9 @@ echo INCLUDEPATH += . \
 echo     third_party/miniz \
 echo     third_party/tree-sitter/lib/include \
 echo     third_party/tree-sitter/lib/src \
-echo     C:/OpenSSL-Win64/include
+echo     C:/OpenSSL-Win64/include \
+echo     C:/Qt/5.15.2/mingw81_64/include \
+echo     C:/Qt/5.15.2/mingw81_64/include/QtCore
 echo.
 echo LIBS += -LC:/OpenSSL-Win64/lib -lssl -lcrypto
 echo.
