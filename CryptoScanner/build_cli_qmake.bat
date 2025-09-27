@@ -37,7 +37,7 @@ echo     C:/msys64/mingw64/include \
 echo     C:/Qt/5.15.2/mingw81_64/include \
 echo     C:/Qt/5.15.2/mingw81_64/include/QtCore
 echo.
-echo LIBS += -LC:/msys64/mingw64/lib -lssl -lcrypto
+echo LIBS += -LC:/Qt/5.15.2/mingw81_64/lib -lQt5Core -LC:/msys64/mingw64/lib -lssl -lcrypto
 echo.
 echo SOURCES += \
 echo     main_gui_cli.cpp \
@@ -47,7 +47,6 @@ echo     PatternLoader.cpp \
 echo     PatternDefinitions.cpp \
 echo     JavaBytecodeScanner.cpp \
 echo     JavaASTScanner.cpp \
-echo     PythonASTScanner.cpp \
 echo     CppASTScanner.cpp \
 echo     DynLinkParser.cpp \
 echo     third_party/miniz/miniz.c \
