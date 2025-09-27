@@ -13,7 +13,7 @@ ARCH=$(uname -m)
 echo "Detected platform: $OS $ARCH"
 
 # Common flags
-COMMON_CFLAGS="-O2 -DUSE_MINIZ -DQT_CORE_LIB"
+COMMON_CFLAGS="-O2 -DUSE_MINIZ -DQT_CORE_LIB -fPIC"
 COMMON_INCLUDES="-I. -I./third_party/miniz -I./third_party/tree-sitter/lib/include -I./third_party/tree-sitter/lib/src"
 
 # Initialize variables
