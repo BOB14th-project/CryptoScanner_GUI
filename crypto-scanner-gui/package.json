@@ -17,6 +17,9 @@
     "dist:linux": "npm run build && npm run dist:linux-amd && npm run dist:linux-arm",
     "dist:linux-amd": "electron-builder --linux --x64 --dir && mv ../linux-unpacked ../linux-amd",
     "dist:linux-arm": "electron-builder --linux --arm64 --dir && mv ../linux-arm64-unpacked ../linux-arm",
+    "dist:win": "npm run build && npm run dist:win-amd && npm run dist:win-arm",
+    "dist:win-amd": "electron-builder --win --x64 --dir && mv ../win-unpacked ../win-amd",
+    "dist:win-arm": "electron-builder --win --arm64 --dir && mv ../win-arm64-unpacked ../win-arm",
     "rebuild": "npm run pack",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -69,7 +72,17 @@
       "identity": null
     },
     "win": {
-      "icon": "src/renderer/assets/icon.ico"
+      "icon": "src/renderer/assets/icon.ico",
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        }
+      ]
     },
     "linux": {
       "icon": "src/renderer/assets/icon.png",
