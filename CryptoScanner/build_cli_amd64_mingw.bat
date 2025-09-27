@@ -24,8 +24,8 @@ for %%i in (
     "C:\mingw64\bin"
     "C:\msys64\mingw64\bin"
 ) do (
-    if exist "%%~i\gcc.exe" (
-        set MINGW_DIR=%%~i
+    if exist %%i\gcc.exe (
+        set MINGW_DIR=%%i
         set MINGW_FOUND=1
         goto :mingw_found
     )
