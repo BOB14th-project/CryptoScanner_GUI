@@ -40,7 +40,6 @@ function createWindow(): void {
       nodeIntegration: false,
       contextIsolation: true,
       preload: preloadPath,
-      enableRemoteModule: false,
       webSecurity: true,
     },
     titleBarStyle: 'hiddenInset',
