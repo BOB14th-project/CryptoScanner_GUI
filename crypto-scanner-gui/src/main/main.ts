@@ -120,9 +120,11 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
     for (const testPath of possiblePaths) {
       console.log('Testing binary path:', testPath);
       if (require('fs').existsSync(testPath)) {
-        // Normalize the path to fix backslash issues on Windows
-        scannerPath = path.normalize(testPath);
+        // Fix Windows path separators: replace ₩ and # with proper backslashes
+        scannerPath = testPath.replace(/[#₩]/g, '\\');
+        scannerPath = path.normalize(scannerPath);
         console.log('✅ Found binary at:', scannerPath);
+        console.log('✅ Fixed path:', scannerPath);
         break;
       } else {
         console.log('❌ Not found:', testPath);
@@ -224,8 +226,11 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
       console.log('  args:', [scanOptions.path]);
       console.log('  cwd:', cryptoScannerDir);
 
-      // Use normalized path for spawn
-      const normalizedScannerPath = path.normalize(scannerPath);
+      // Use normalized path for spawn - fix Korean Windows path separators
+      let normalizedScannerPath = scannerPath.replace(/[#₩]/g, '\\');
+      normalizedScannerPath = path.normalize(normalizedScannerPath);
+      console.log('  final normalized path:', normalizedScannerPath);
+
       scannerProcess = spawn(normalizedScannerPath, [scanOptions.path], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: cryptoScannerDir, // Set working directory to CryptoScanner folder
