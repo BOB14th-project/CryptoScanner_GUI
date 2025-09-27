@@ -27,12 +27,15 @@ echo CONFIG -= app_bundle qt
 echo.
 echo QT += core
 echo.
-echo DEFINES += USE_MINIZ MINIZ_STATIC_DEFINE QT_CORE_LIB
+echo DEFINES += USE_MINIZ MINIZ_STATIC_DEFINE QT_CORE_LIB USE_OPENSSL
 echo.
 echo INCLUDEPATH += . \
 echo     third_party/miniz \
 echo     third_party/tree-sitter/lib/include \
-echo     third_party/tree-sitter/lib/src
+echo     third_party/tree-sitter/lib/src \
+echo     C:/OpenSSL-Win64/include
+echo.
+echo LIBS += -LC:/OpenSSL-Win64/lib -lssl -lcrypto
 echo.
 echo SOURCES += \
 echo     main_gui_cli.cpp \
