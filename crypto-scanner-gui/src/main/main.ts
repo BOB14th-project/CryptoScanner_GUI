@@ -8,13 +8,17 @@ let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
 
 function createWindow(): void {
+  const preloadPath = path.join(__dirname, 'preload.js');
+  console.log('Preload path:', preloadPath);
+  console.log('Preload exists:', require('fs').existsSync(preloadPath));
+
   mainWindow = new BrowserWindow({
     height: 800,
     width: 1200,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: preloadPath,
     },
     titleBarStyle: 'hiddenInset',
     show: false, // Don't show until ready
