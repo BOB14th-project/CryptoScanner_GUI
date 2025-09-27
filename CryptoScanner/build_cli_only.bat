@@ -12,13 +12,22 @@ set ARCH=%PROCESSOR_ARCHITECTURE%
 echo Detected architecture: %ARCH%
 
 REM Set up Visual Studio environment
-call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 if errorlevel 1 (
-    call "C:\Program Files\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+    call "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+)
+if errorlevel 1 (
+    call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+)
+if errorlevel 1 (
+    call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 )
 if errorlevel 1 (
     echo Error: Visual Studio Build Tools not found.
-    echo Please install Visual Studio 2019 Build Tools or Visual Studio 2019/2022
+    echo Please check if Visual Studio 2022 is installed at:
+    echo   "C:\Program Files\Microsoft Visual Studio\2022\Community"
+    echo   "C:\Program Files\Microsoft Visual Studio\2022\Professional"
+    echo   "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
     exit /b 1
 )
 
