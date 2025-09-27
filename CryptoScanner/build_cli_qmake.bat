@@ -33,11 +33,11 @@ echo INCLUDEPATH += . \
 echo     third_party/miniz \
 echo     third_party/tree-sitter/lib/include \
 echo     third_party/tree-sitter/lib/src \
-echo     C:/OpenSSL-Win64/include \
+echo     C:/msys64/mingw64/include \
 echo     C:/Qt/5.15.2/mingw81_64/include \
 echo     C:/Qt/5.15.2/mingw81_64/include/QtCore
 echo.
-echo LIBS += -LC:/OpenSSL-Win64/lib -lssl -lcrypto
+echo LIBS += -LC:/msys64/mingw64/lib -lssl -lcrypto
 echo.
 echo SOURCES += \
 echo     main_gui_cli.cpp \
@@ -57,9 +57,7 @@ echo     third_party/miniz/miniz_tdef.c \
 echo     third_party/tree-sitter/lib/src/lib.c \
 echo     third_party/tree-sitter-cpp/src/parser.c \
 echo     third_party/tree-sitter-cpp/src/scanner.c \
-echo     third_party/tree-sitter-java/src/parser.c \
-echo     third_party/tree-sitter-python/src/parser.c \
-echo     third_party/tree-sitter-python/src/scanner.c
+echo     third_party/tree-sitter-java/src/parser.c
 echo.
 echo HEADERS += \
 echo     CryptoScanner.h \
