@@ -5,7 +5,8 @@
   "main": "dist/main/main.js",
   "scripts": {
     "build-renderer": "webpack --mode=production",
-    "build-main": "tsc --project tsconfig.main.json && cd ../CryptoScanner && ./build_cli_only.sh && cp CryptoScannerCLI ../crypto-scanner-gui/dist/main/CryptoScanner && cp patterns.json ../crypto-scanner-gui/dist/main/patterns.json && chmod +x ../crypto-scanner-gui/dist/main/CryptoScanner",
+    "build-main": "tsc --project tsconfig.main.json && npm run build-backend",
+    "build-backend": "node -e \"const os = require('os'); const { execSync } = require('child_process'); if (os.platform() === 'win32') { console.log('Building C++ backend for Windows...'); execSync('cd ..\\\\CryptoScanner && build_cli_only.bat && copy CryptoScannerCLI.exe ..\\\\crypto-scanner-gui\\\\dist\\\\main\\\\CryptoScanner.exe && copy patterns.json ..\\\\crypto-scanner-gui\\\\dist\\\\main\\\\patterns.json', {stdio: 'inherit'}); } else { execSync('cd ../CryptoScanner && ./build_cli_only.sh && cp CryptoScannerCLI ../crypto-scanner-gui/dist/main/CryptoScanner && cp patterns.json ../crypto-scanner-gui/dist/main/patterns.json && chmod +x ../crypto-scanner-gui/dist/main/CryptoScanner', {stdio: 'inherit'}); }\"",
     "build-preload": "tsc --project tsconfig.preload.json",
     "build": "npm run build-renderer && npm run build-main && npm run build-preload",
     "dev-renderer": "webpack serve --mode=development",
@@ -18,8 +19,9 @@
     "dist:linux-amd": "electron-builder --linux --x64 --dir && mv ../linux-unpacked ../linux-amd",
     "dist:linux-arm": "electron-builder --linux --arm64 --dir && mv ../linux-arm64-unpacked ../linux-arm",
     "dist:win": "npm run build && npm run dist:win-amd && npm run dist:win-arm",
-    "dist:win-amd": "electron-builder --win --x64 --dir && mv ../win-unpacked ../win-amd",
-    "dist:win-arm": "electron-builder --win --arm64 --dir && mv ../win-arm64-unpacked ../win-arm",
+    "dist:win-amd": "npm run copy-backend && electron-builder --win --x64 --dir && move ..\\win-unpacked ..\\win-amd",
+    "dist:win-arm": "npm run copy-backend && electron-builder --win --arm64 --dir && move ..\\win-arm64-unpacked ..\\win-arm",
+    "copy-backend": "node -e \"const fs = require('fs'); const path = require('path'); try { fs.mkdirSync(path.join(__dirname, 'dist', 'main'), {recursive: true}); console.log('Created dist/main directory'); } catch(e) { console.log('dist/main already exists'); }\"",
     "rebuild": "npm run pack",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
