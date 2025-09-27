@@ -6,22 +6,41 @@
 #  define MINIZ_NO_EXPORT
 #else
 #  ifndef MINIZ_EXPORT
-#    ifdef miniz_EXPORTS
-        /* We are building this library */
+#    ifdef _MSC_VER
+        /* MSVC */
+#      ifdef miniz_EXPORTS
+#        define MINIZ_EXPORT __declspec(dllexport)
+#      else
+#        define MINIZ_EXPORT __declspec(dllimport)
+#      endif
+#    elif defined(__GNUC__)
+        /* GCC */
 #      define MINIZ_EXPORT __attribute__((visibility("default")))
 #    else
-        /* We are using this library */
-#      define MINIZ_EXPORT __attribute__((visibility("default")))
+        /* Other compilers */
+#      define MINIZ_EXPORT
 #    endif
 #  endif
 
 #  ifndef MINIZ_NO_EXPORT
-#    define MINIZ_NO_EXPORT __attribute__((visibility("hidden")))
+#    ifdef _MSC_VER
+#      define MINIZ_NO_EXPORT
+#    elif defined(__GNUC__)
+#      define MINIZ_NO_EXPORT __attribute__((visibility("hidden")))
+#    else
+#      define MINIZ_NO_EXPORT
+#    endif
 #  endif
 #endif
 
 #ifndef MINIZ_DEPRECATED
-#  define MINIZ_DEPRECATED __attribute__ ((__deprecated__))
+#  ifdef _MSC_VER
+#    define MINIZ_DEPRECATED __declspec(deprecated)
+#  elif defined(__GNUC__)
+#    define MINIZ_DEPRECATED __attribute__ ((__deprecated__))
+#  else
+#    define MINIZ_DEPRECATED
+#  endif
 #endif
 
 #ifndef MINIZ_DEPRECATED_EXPORT

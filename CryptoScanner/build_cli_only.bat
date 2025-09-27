@@ -32,7 +32,7 @@ if errorlevel 1 (
 )
 
 REM Common flags
-set COMMON_CFLAGS=/O2 /DUSE_MINIZ /DQT_CORE_LIB /DWIN32 /D_WINDOWS /EHsc /std:c++17
+set COMMON_CFLAGS=/O2 /DUSE_MINIZ /DMINIZ_STATIC_DEFINE /DQT_CORE_LIB /DWIN32 /D_WINDOWS /EHsc /std:c++17
 
 REM Qt detection for Windows
 set QT_FOUND=0
