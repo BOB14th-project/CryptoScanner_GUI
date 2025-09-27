@@ -16,20 +16,22 @@ set MINGW_FOUND=0
 set MINGW_DIR=
 
 REM Check common MinGW installation paths
-for %%i in (
-    "C:\Qt\5.15.2\mingw81_64\bin"
-    "C:\Qt\6.9.2\mingw_64\bin"
-    "C:\Qt\Tools\mingw810_64\bin"
-    "C:\Qt\Tools\mingw1120_64\bin"
-    "C:\mingw64\bin"
-    "C:\msys64\mingw64\bin"
-) do (
-    if exist %%i\gcc.exe (
-        set MINGW_DIR=%%i
-        set MINGW_FOUND=1
-        goto :mingw_found
-    )
+echo Checking for gcc.exe at:
+if exist "C:\Qt\5.15.2\mingw81_64\bin\gcc.exe" (
+    set MINGW_DIR=C:\Qt\5.15.2\mingw81_64\bin
+    set MINGW_FOUND=1
+    echo Found: C:\Qt\5.15.2\mingw81_64\bin\gcc.exe
+    goto :mingw_found
 )
+echo   C:\Qt\5.15.2\mingw81_64\bin\gcc.exe - NOT FOUND
+
+if exist "C:\Qt\6.9.2\mingw_64\bin\gcc.exe" (
+    set MINGW_DIR=C:\Qt\6.9.2\mingw_64\bin
+    set MINGW_FOUND=1
+    echo Found: C:\Qt\6.9.2\mingw_64\bin\gcc.exe
+    goto :mingw_found
+)
+echo   C:\Qt\6.9.2\mingw_64\bin\gcc.exe - NOT FOUND
 
 :mingw_found
 if %MINGW_FOUND%==0 (
