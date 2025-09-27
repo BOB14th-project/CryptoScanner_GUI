@@ -40,6 +40,7 @@ set QT_DIR=
 
 REM Check common Qt installation paths
 for %%i in (
+    "C:\Qt\5.15.2\mingw81_64"
     "C:\Qt\5.15.2\msvc2019_64"
     "C:\Qt\Qt5.15.2\5.15.2\msvc2019_64"
     "C:\Qt\5.15.1\msvc2019_64"
@@ -58,6 +59,7 @@ if %QT_FOUND%==0 (
     echo Error: Qt development libraries not found.
     echo Please install Qt 5.15.x or Qt 6.x from https://www.qt.io/download-qt-installer
     echo Expected locations:
+    echo   C:\Qt\5.15.2\mingw81_64
     echo   C:\Qt\5.15.2\msvc2019_64
     echo   C:\Qt\Qt5.15.2\5.15.2\msvc2019_64
     exit /b 1
@@ -72,6 +74,11 @@ set QT_LIBS="%QT_DIR%\lib\Qt5Core.lib"
 REM Check if Qt6
 echo %QT_DIR% | findstr /C:"Qt6" >nul && (
     set QT_LIBS="%QT_DIR%\lib\Qt6Core.lib"
+)
+
+REM Check if mingw
+echo %QT_DIR% | findstr /C:"mingw" >nul && (
+    set QT_LIBS="%QT_DIR%\lib\libQt5Core.a"
 )
 
 REM OpenSSL detection (try vcpkg first, then manual)
