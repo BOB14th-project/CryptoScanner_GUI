@@ -103,12 +103,29 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
   console.log('=== start-scan IPC called ===');
   return new Promise((resolve, reject) => {
     // Path to the compiled CryptoScanner binary
-    let scannerPath = path.join(__dirname, process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner');
+    const binaryName = process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner';
+    let scannerPath = path.join(__dirname, binaryName);
 
-    // In production app, use the CLI binary from the app bundle
-    if (process.resourcesPath) {
-      // For packaged app, use our CLI binary from resources/app.asar.unpacked
-      scannerPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner');
+    // Try different possible locations for the binary
+    const possiblePaths = [
+      path.join(__dirname, binaryName),
+      path.join(process.resourcesPath || '', 'app.asar.unpacked', 'dist', 'main', binaryName),
+      path.join(process.resourcesPath || '', 'app', 'dist', 'main', binaryName),
+    ];
+
+    console.log('Looking for CryptoScanner binary...');
+    console.log('__dirname:', __dirname);
+    console.log('process.resourcesPath:', process.resourcesPath);
+
+    for (const testPath of possiblePaths) {
+      console.log('Testing binary path:', testPath);
+      if (require('fs').existsSync(testPath)) {
+        scannerPath = testPath;
+        console.log('✅ Found binary at:', scannerPath);
+        break;
+      } else {
+        console.log('❌ Not found:', testPath);
+      }
     }
 
     try {
