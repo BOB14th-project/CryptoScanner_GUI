@@ -18,18 +18,28 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
   const [selectedPath, setSelectedPath] = useState<string>('');
 
   const handleSelectPath = async () => {
-    if (!window.electronAPI) return;
+    console.log('handleSelectPath called');
+    console.log('window.electronAPI:', window.electronAPI);
+
+    if (!window.electronAPI) {
+      console.error('electronAPI not available');
+      alert('electronAPI not available');
+      return;
+    }
 
     try {
+      console.log('Attempting to select path, scanType:', scanType);
       const path = scanType === 'folder'
         ? await window.electronAPI.selectFolder()
         : await window.electronAPI.selectFile();
 
+      console.log('Selected path:', path);
       if (path) {
         setSelectedPath(path);
       }
     } catch (error) {
       console.error('Failed to select path:', error);
+      alert(`Failed to select path: ${error}`);
     }
   };
 
