@@ -109,6 +109,31 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
     console.log('__dirname:', __dirname);
     console.log('process.resourcesPath:', process.resourcesPath);
 
+    // Debug: List actual files in the expected directory
+    if (process.resourcesPath) {
+      try {
+        const fs = require('fs');
+        const expectedDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main');
+        console.log('Expected directory:', expectedDir);
+        if (fs.existsSync(expectedDir)) {
+          const files = fs.readdirSync(expectedDir);
+          console.log('Files in expected directory:', files);
+        } else {
+          console.log('Expected directory does not exist');
+
+          // Check if app.asar.unpacked exists
+          const unpackedDir = path.join(process.resourcesPath, 'app.asar.unpacked');
+          if (fs.existsSync(unpackedDir)) {
+            console.log('app.asar.unpacked exists, contents:', fs.readdirSync(unpackedDir));
+          } else {
+            console.log('app.asar.unpacked does not exist');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking directories:', error);
+      }
+    }
+
     let scannerPath;
 
     // For packaged Windows app, use direct string construction to avoid path issues
