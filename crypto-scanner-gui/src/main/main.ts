@@ -102,33 +102,53 @@ ipcMain.handle('select-file', async () => {
 ipcMain.handle('start-scan', async (event, scanOptions) => {
   console.log('=== start-scan IPC called ===');
   return new Promise((resolve, reject) => {
-    // Path to the compiled CryptoScanner binary
+    // Simplified binary path handling for Windows
     const binaryName = process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner';
-    let scannerPath = path.join(__dirname, binaryName);
-
-    // Try different possible locations for the binary
-    const possiblePaths = [
-      path.join(__dirname, binaryName),
-      path.join(process.resourcesPath || '', 'app.asar.unpacked', 'dist', 'main', binaryName),
-      path.join(process.resourcesPath || '', 'app', 'dist', 'main', binaryName),
-    ];
 
     console.log('Looking for CryptoScanner binary...');
     console.log('__dirname:', __dirname);
     console.log('process.resourcesPath:', process.resourcesPath);
 
-    for (const testPath of possiblePaths) {
-      console.log('Testing binary path:', testPath);
-      if (require('fs').existsSync(testPath)) {
-        // Fix Windows path separators: replace ₩ and # with proper backslashes
-        scannerPath = testPath.replace(/[#₩]/g, '\\');
-        scannerPath = path.normalize(scannerPath);
-        console.log('✅ Found binary at:', scannerPath);
-        console.log('✅ Fixed path:', scannerPath);
-        break;
-      } else {
-        console.log('❌ Not found:', testPath);
+    let scannerPath;
+
+    // For packaged Windows app, use direct string construction to avoid path issues
+    if (process.platform === 'win32' && process.resourcesPath) {
+      // Build path as string to avoid Node.js path corruption issues
+      const resourcesDir = process.resourcesPath.replace(/[#₩]/g, '\\');
+      scannerPath = `${resourcesDir}\\app.asar.unpacked\\dist\\main\\${binaryName}`;
+      console.log('Windows packaged path:', scannerPath);
+    } else {
+      // For development or other platforms
+      scannerPath = path.join(__dirname, binaryName);
+      console.log('Development path:', scannerPath);
+    }
+
+    // Verify binary exists
+    const fs = require('fs');
+    if (!fs.existsSync(scannerPath)) {
+      console.log('❌ Binary not found at:', scannerPath);
+      // Try alternative locations
+      const altPaths = [
+        path.join(__dirname, binaryName),
+        path.join(__dirname, '..', binaryName),
+      ];
+
+      let found = false;
+      for (const altPath of altPaths) {
+        if (fs.existsSync(altPath)) {
+          scannerPath = altPath;
+          found = true;
+          console.log('✅ Found binary at alternative path:', scannerPath);
+          break;
+        }
       }
+
+      if (!found) {
+        reject(new Error('CryptoScanner binary not found. Please build it first using: cd CryptoScanner && make'));
+        return;
+      }
+    } else {
+      console.log('✅ Found binary at:', scannerPath);
     }
 
     try {
@@ -222,16 +242,17 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
       console.log('About to spawn process:');
       console.log('  scannerPath:', scannerPath);
-      console.log('  normalized scannerPath:', path.normalize(scannerPath));
       console.log('  args:', [scanOptions.path]);
       console.log('  cwd:', cryptoScannerDir);
 
-      // Use normalized path for spawn - fix Korean Windows path separators
-      let normalizedScannerPath = scannerPath.replace(/[#₩]/g, '\\');
-      normalizedScannerPath = path.normalize(normalizedScannerPath);
-      console.log('  final normalized path:', normalizedScannerPath);
+      // For Windows, ensure path uses proper separators
+      let finalScannerPath = scannerPath;
+      if (process.platform === 'win32') {
+        finalScannerPath = scannerPath.replace(/[#₩]/g, '\\').replace(/\//g, '\\');
+      }
+      console.log('  final path for spawn:', finalScannerPath);
 
-      scannerProcess = spawn(normalizedScannerPath, [scanOptions.path], {
+      scannerProcess = spawn(finalScannerPath, [scanOptions.path], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: cryptoScannerDir, // Set working directory to CryptoScanner folder
         env: {
