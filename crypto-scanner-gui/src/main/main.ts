@@ -8,9 +8,30 @@ let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
 
 function createWindow(): void {
-  const preloadPath = path.join(__dirname, 'preload.js');
-  console.log('Preload path:', preloadPath);
-  console.log('Preload exists:', require('fs').existsSync(preloadPath));
+  let preloadPath = path.join(__dirname, 'preload.js');
+
+  // Try different preload paths for packaged app
+  const preloadPaths = [
+    path.join(__dirname, 'preload.js'),
+    path.join(__dirname, '..', 'preload.js'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'dist', 'main', 'preload.js'),
+    path.join(process.resourcesPath || '', 'app', 'dist', 'main', 'preload.js'),
+  ];
+
+  for (const testPath of preloadPaths) {
+    console.log('Testing preload path:', testPath);
+    if (require('fs').existsSync(testPath)) {
+      preloadPath = testPath;
+      console.log('✅ Found preload at:', preloadPath);
+      break;
+    } else {
+      console.log('❌ Not found:', testPath);
+    }
+  }
+
+  console.log('Final preload path:', preloadPath);
+  console.log('__dirname:', __dirname);
+  console.log('process.resourcesPath:', process.resourcesPath);
 
   mainWindow = new BrowserWindow({
     height: 800,
@@ -19,6 +40,8 @@ function createWindow(): void {
       nodeIntegration: false,
       contextIsolation: true,
       preload: preloadPath,
+      enableRemoteModule: false,
+      webSecurity: true,
     },
     titleBarStyle: 'hiddenInset',
     show: false, // Don't show until ready
@@ -29,6 +52,7 @@ function createWindow(): void {
     mainWindow.show();
     mainWindow.focus();
   });
+
 
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:4000');
