@@ -65,6 +65,7 @@
     ],
     "asarUnpack": [
       "dist/main/CryptoScanner",
+      "dist/main/CryptoScanner.exe",
       "dist/main/patterns.json"
     ],
     "mac": {
