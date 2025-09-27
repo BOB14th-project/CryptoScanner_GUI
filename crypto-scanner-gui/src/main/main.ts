@@ -120,7 +120,8 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
     for (const testPath of possiblePaths) {
       console.log('Testing binary path:', testPath);
       if (require('fs').existsSync(testPath)) {
-        scannerPath = testPath;
+        // Normalize the path to fix backslash issues on Windows
+        scannerPath = path.normalize(testPath);
         console.log('✅ Found binary at:', scannerPath);
         break;
       } else {
@@ -219,10 +220,13 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
       console.log('About to spawn process:');
       console.log('  scannerPath:', scannerPath);
+      console.log('  normalized scannerPath:', path.normalize(scannerPath));
       console.log('  args:', [scanOptions.path]);
       console.log('  cwd:', cryptoScannerDir);
 
-      scannerProcess = spawn(scannerPath, [scanOptions.path], {
+      // Use normalized path for spawn
+      const normalizedScannerPath = path.normalize(scannerPath);
+      scannerProcess = spawn(normalizedScannerPath, [scanOptions.path], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: cryptoScannerDir, // Set working directory to CryptoScanner folder
         env: {
