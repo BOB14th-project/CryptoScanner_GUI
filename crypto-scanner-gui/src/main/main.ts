@@ -76,12 +76,12 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
   console.log('=== start-scan IPC called ===');
   return new Promise((resolve, reject) => {
     // Path to the compiled CryptoScanner binary
-    let scannerPath = path.join(__dirname, 'CryptoScanner');
+    let scannerPath = path.join(__dirname, process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner');
 
     // In production app, use the CLI binary from the app bundle
     if (process.resourcesPath) {
       // For packaged app, use our CLI binary from resources/app.asar.unpacked
-      scannerPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', 'CryptoScanner');
+      scannerPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner');
     }
 
     try {
