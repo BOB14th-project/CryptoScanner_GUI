@@ -103,7 +103,7 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
   console.log('=== start-scan IPC called ===');
   return new Promise((resolve, reject) => {
     // Simplified binary path handling for Windows
-    const binaryName = process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner';
+    const binaryName = process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScannerCLI';
 
     console.log('Looking for CryptoScanner binary...');
     console.log('__dirname:', __dirname);
@@ -155,6 +155,10 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
       const altPaths = [
         path.join(__dirname, binaryName),
         path.join(__dirname, '..', binaryName),
+        path.join(__dirname, '..', '..', 'CryptoScanner', binaryName),
+        path.join(__dirname, '..', '..', '..', 'CryptoScanner', binaryName),
+        path.join(process.cwd(), 'CryptoScanner', binaryName),
+        path.join(process.cwd(), '..', 'CryptoScanner', binaryName),
       ];
 
       let found = false;
