@@ -135,21 +135,21 @@ git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 ### 3️⃣ 백엔드 빌드
 
 ```bash
-cd CryptoScanner
-./windows_amd.bat
+cd CryptoScanner_GUI\CryptoScanner
+.\windows_amd.bat
 ```
 
 ### 4️⃣ GUI 설치 및 실행
 
 ```bash
-cd ../crypto-scanner-gui
+cd ..\crypto-scanner-gui
 
 npm install
 npm run build
 npm run dist:win-amd
 
-cd ../win-amd
-./CryptoScanner.exe
+cd ..\win-amd
+.\CryptoScanner.exe
 ```
 
 <br />
