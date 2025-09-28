@@ -72,53 +72,80 @@ cd ../linux-arm
 
 <br />
 
-## 💻 Windows
+## 💻 Windows (AMD)
 
 ### 1️⃣ 의존성 설치
 
-```bash
-# Chocolatey 설치 (PowerShell 관리자 권한으로 실행)
+```powershell
+# PowerShell 관리자 권한 실행
+# Chocolatey 설치
 Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
-# 필요한 패키지 설치
-choco install nodejs git visualstudio2019buildtools vcredist140 -y
+# Chocolatey 설치된 경우
+choco upgrade chocolatey
 
-# Qt 설치 (Qt 온라인 설치 프로그램으로 Qt5 설치)
-# https://www.qt.io/download-qt-installer 에서 다운로드 후 Qt 5.15.x 설치
+# 필요한 패키지 설치
+choco install nodejs git -y
+```
+
+```bash
+# Qt 설치 01 (설치 경로: C:\Qt)
+# https://www.qt.io/download-qt-installer
+
+# 1) 회원 가입
+# 2) 설치 옵선 선택 시, 하단의 사용자 지정 설치 클릭
+# 3) 사용자 정의 화면에서 Qt > Qt 6.9.2 > Additional Libraries > Qt 5 Compatibility moudule 선택
+```
+
+```bash
+# Qt 설치 02 (설치 경로: C:\Qt)
+
+# 0) PowerShell 관리자 권한 실행
+Remove-Item "$env:TEMP\aqt.exe" -ErrorAction SilentlyContinue
+
+# 1) aqt.exe 최신 릴리스로 받기 (GitHub Releases의 aqt.exe)
+$aqt = Join-Path $env:TEMP 'aqt.exe'
+Invoke-WebRequest -Uri "https://github.com/miurahr/aqtinstall/releases/latest/download/aqt.exe" -OutFile $aqt
+
+# 2) 파일 점검
+Get-Item $aqt | Format-List Name,Length,FullName
+
+# 3) Qt 5.15.2 (win64_mingw81) → C:\Qt\5.15.2\mingw81_64 생성
+& $aqt install-qt windows desktop 5.15.2 win64_mingw81 -O C:\Qt
+```
+
+```powershell
+# git for windows (설치 경로: C:\Program Files\Git)
+# https://gitforwindows.org/
 ```
 
 ### 2️⃣ 저장소 복제
 
 ```bash
+cd C:\
+
 # 저장소 설치
 git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 ```
 
-### 3️⃣ npm 설치
+### 3️⃣ 백엔드 빌드
 
 ```bash
-cd CryptoScanner_GUI/crypto-scanner-gui
-
-# npm 명령어
-npm install
+cd CryptoScanner
+./windows_amd.bat
 ```
 
-### 4️⃣ GUI 설치 및 실행 - **AMD64**
+### 4️⃣ GUI 설치 및 실행
 
 ```bash
+cd ../crypto-scanner-gui
+
+npm install
+npm run build
 npm run dist:win-amd
 
 cd ../win-amd
-./crypto-scanner-gui.exe
-```
-
-### 5️⃣ GUI 설치 및 실행 - **ARM64**
-
-```bash
-npm run dist:win-arm
-
-cd ../win-arm
-./crypto-scanner-gui.exe
+./CryptoScanner.exe
 ```
 
 <br />
