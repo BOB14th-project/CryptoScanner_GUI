@@ -184,7 +184,7 @@ cd CryptoScanner_GUI/CryptoScanner
 ./mac_linux_amd_arm.sh
 ```
 
-### 4️⃣ GUI 설치 및 실행 및 실행
+### 4️⃣ GUI 설치 및 실행
 
 ```bash
 cd ../crypto-scanner-gui
@@ -192,6 +192,7 @@ cd ../crypto-scanner-gui
 # npm 명령어
 npm install
 npm run build
+npm run copy-backend
 npm run dist
 
 cd ../mac-arm64
