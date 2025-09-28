@@ -136,11 +136,10 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
     let scannerPath;
 
-    // For packaged Windows app, use direct string construction to avoid path issues
+    // For packaged Windows app, use proper path handling
     if (process.platform === 'win32' && process.resourcesPath) {
-      // Build path as string to avoid Node.js path corruption issues
-      const resourcesDir = process.resourcesPath.replace(/[#₩]/g, '\\');
-      scannerPath = `${resourcesDir}\\app.asar.unpacked\\dist\\main\\${binaryName}`;
+      // Use path.join for proper path handling on Windows
+      scannerPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', binaryName);
       console.log('Windows packaged path:', scannerPath);
     } else {
       // For development or other platforms
@@ -268,24 +267,44 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
       console.log('About to spawn process:');
       console.log('  scannerPath:', scannerPath);
       console.log('  args:', [scanOptions.path]);
-      console.log('  cwd:', cryptoScannerDir);
+      console.log('  old cwd (not used):', cryptoScannerDir);
 
-      // For Windows, ensure path uses proper separators
-      let finalScannerPath = scannerPath;
-      if (process.platform === 'win32') {
-        finalScannerPath = scannerPath.replace(/[#₩]/g, '\\').replace(/\//g, '\\');
+      console.log('  scanner path for spawn:', scannerPath);
+
+      // Set working directory to where the scanner executable is located
+      const scannerDir = path.dirname(scannerPath);
+      console.log('  scanner directory for cwd:', scannerDir);
+
+      // For packaged apps, ensure patterns.json is accessible
+      let effectiveCwd = scannerDir;
+      if (process.resourcesPath) {
+        // Copy patterns.json to scanner directory if it doesn't exist there
+        const scannerPatternsPath = path.join(scannerDir, 'patterns.json');
+        const sourcePatternsPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', 'patterns.json');
+
+        if (!require('fs').existsSync(scannerPatternsPath) && require('fs').existsSync(sourcePatternsPath)) {
+          require('fs').copyFileSync(sourcePatternsPath, scannerPatternsPath);
+          console.log('Copied patterns.json to scanner directory:', scannerPatternsPath);
+        }
       }
-      console.log('  final path for spawn:', finalScannerPath);
 
-      scannerProcess = spawn(finalScannerPath, [scanOptions.path], {
+      // Set environment variables to ensure DLLs are found
+      const spawnEnv = {
+        ...process.env,
+        PATH: `${scannerDir};${process.env.PATH || ''}`,
+        QT_QPA_PLATFORM: 'minimal',
+        QT_PLUGIN_PATH: scannerDir,
+        QT_QPA_PLATFORM_PLUGIN_PATH: scannerDir
+      };
+
+      console.log('Spawn environment PATH:', spawnEnv.PATH);
+
+      scannerProcess = spawn(scannerPath, [scanOptions.path], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: cryptoScannerDir, // Set working directory to CryptoScanner folder
+        cwd: effectiveCwd,
         windowsHide: false, // Show console window for debugging
         shell: false, // Don't use shell
-        env: {
-          ...process.env,
-          PATH: process.env.PATH || ''
-        }
+        env: spawnEnv
       });
 
       let output = '';
