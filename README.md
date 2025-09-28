@@ -24,16 +24,16 @@ CryptoScanner_GUI/
 
 # ⚙️ 설치 과정
 
-### 💻 Linux (Debian/Ubuntu)
+## 💻 Linux (Debian/Ubuntu)
 
 ### 1️⃣ 의존성 설치
 
 ```bash
 # 시스템 패키지 업데이트
-sudo apt-get update
+sudo apt update
 
 # 필요한 패키지 설치
-sudo apt-get install build-essential qtbase5-dev libssl-dev pkg-config
+sudo apt install build-essential qtbase5-dev libssl-dev pkg-config npm clang
 ```
 
 ### 2️⃣ 저장소 복제
@@ -43,31 +43,35 @@ sudo apt-get install build-essential qtbase5-dev libssl-dev pkg-config
 git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 ```
 
-### 3️⃣ npm 설치
+### 3️⃣ 백엔드 빌드
 
 ```bash
-cd CryptoScanner/crypto-scanner-gui
+# 백엔드 빌드
+cd CryptoScanner_GUI/CryptoScanner
+
+./mac_linux_amd_arm.sh
+```
+
+### 4️⃣ GUI 설치
+
+```bash
+cd ../crypto-scanner-gui
 
 # npm 명령어
 npm install
+npm run build
 ```
 
-### 4️⃣ GUI 설치 및 실행 - **AMD**
+### 5️⃣ 실행 - **AMD**
 
 ```bash
 npm run dist:linux-amd
-
-cd ../linux-amd
-./crypto-scanner-gui
 ```
 
-### 5️⃣ GUI 설치 및 실행 - **ARM**
+### 6️⃣ 실행 - **ARM**
 
 ```bash
 npm run dist:linux-arm
-
-cd ../linux-arm
-./crypto-scanner-gui
 ```
 
 <br />
@@ -88,7 +92,7 @@ choco upgrade chocolatey
 choco install nodejs git -y
 ```
 
-```bash
+```powershell
 # Qt 설치 01 (설치 경로: C:\Qt)
 # https://www.qt.io/download-qt-installer
 
@@ -224,7 +228,7 @@ open CryptoScanner.app
 - 우측: 선택된 스캔 타입별 인터페이스
 - 파일/폴더 선택 후 스캔 시작
 
-### **6️⃣ Full Scan Page [⚠️ 기능 사용 일시정지]**
+### **6️⃣ Full Scan Page** [기능 사용 일시정지]
 
 - 전체 시스템 스캔 인터페이스
 - 스캔 시작 버튼만 제공

@@ -136,13 +136,13 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
     let scannerPath;
 
-    // For packaged Windows app, use proper path handling
-    if (process.platform === 'win32' && process.resourcesPath) {
-      // Use path.join for proper path handling on Windows
+    // For packaged app, use app.asar.unpacked path
+    if (process.resourcesPath) {
+      // Use path.join for proper path handling on all platforms
       scannerPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', binaryName);
-      console.log('Windows packaged path:', scannerPath);
+      console.log('Packaged app path:', scannerPath);
     } else {
-      // For development or other platforms
+      // For development mode
       scannerPath = path.join(__dirname, binaryName);
       console.log('Development path:', scannerPath);
     }
