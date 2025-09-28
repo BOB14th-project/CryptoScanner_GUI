@@ -144,6 +144,7 @@ cd CryptoScanner_GUI\CryptoScanner
 ```bash
 cd ..\crypto-scanner-gui
 
+# npm 명령어
 npm install
 npm run build
 npm run dist:win-amd
@@ -176,18 +177,21 @@ sudo ln -sf /opt/homebrew/bin/llvm-objdump /opt/homebrew/bin/objdump
 git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 ```
 
-### 3️⃣ npm 설치
+### 3️⃣ 백엔드 빌드
 
 ```bash
-cd CryptoScanner/crypto-scanner-gui
+cd CryptoScanner_GUI/CryptoScanner
+./mac_linux_amd_arm.sh
+```
+
+### 4️⃣ GUI 설치 및 실행 및 실행
+
+```bash
+cd ../crypto-scanner-gui
 
 # npm 명령어
 npm install
-```
-
-### 4️⃣ GUI 설치 및 실행
-
-```bash
+npm run build
 npm run dist
 
 cd ../mac-arm64
