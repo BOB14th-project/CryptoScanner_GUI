@@ -175,7 +175,22 @@ static inline bool truncateFile(const fs::path& p){
 
 static inline size_t runCapture(const std::string& cmd, const fs::path& out){
 #if defined(_WIN32)
-    return 0;
+    // Windows에서 popen 대신 _popen 사용
+    FILE* pipe = _popen(cmd.c_str(), "r");
+    if(!pipe) return 0;
+    std::ofstream f(out, std::ios::binary | std::ios::trunc);
+    if(!f){ _pclose(pipe); return 0; }
+    char buf[8192];
+    size_t total = 0;
+    for(;;){
+        size_t r = fread(buf, 1, sizeof(buf), pipe);
+        if(r == 0) break;
+        f.write(buf, static_cast<std::streamsize>(r));
+        total += r;
+    }
+    f.flush();
+    _pclose(pipe);
+    return total;
 #else
     FILE* pipe = popen(cmd.c_str(), "r");
     if(!pipe) return 0;
@@ -457,9 +472,91 @@ static inline size_t disassembleWithCandidatesELF(const std::string& arch, const
     }
 }
 
+static inline size_t disassembleWithCandidatesWindows(const std::string& arch, const std::string& filePath, const fs::path& outAsm){
+    const char* sections[] = {".text","CODE",".code",".text$mn",".init",".text.startup"};
+    size_t wrote = 0;
+
+    // Try llvm-objdump first (most likely to be available)
+    if(arch=="i386"){
+        // Intel 32-bit
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
+        wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+
+        // Try alternative paths for llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("\"C:\\Program Files\\LLVM\\bin\\llvm-objdump.exe\" -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
+        wrote = tryCmdChecked(std::string("\"C:\\Program Files\\LLVM\\bin\\llvm-objdump.exe\" -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+
+    }else if(arch=="i386:x86-64"){
+        // Intel 64-bit
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
+        wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+
+        // Try alternative paths for llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("\"C:\\Program Files\\LLVM\\bin\\llvm-objdump.exe\" -d --no-show-raw-insn --x86-asm-syntax=intel", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
+        wrote = tryCmdChecked(std::string("\"C:\\Program Files\\LLVM\\bin\\llvm-objdump.exe\" -d --no-show-raw-insn --x86-asm-syntax=intel ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+
+    }else{
+        // ARM or other architectures
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("llvm-objdump -d --no-show-raw-insn", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
+        wrote = tryCmdChecked(std::string("llvm-objdump -d --no-show-raw-insn ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+
+        // Try alternative paths for llvm-objdump
+        for(const char* s: sections){
+            wrote = tryCmdSectionChecked("\"C:\\Program Files\\LLVM\\bin\\llvm-objdump.exe\" -d --no-show-raw-insn", filePath, s, outAsm);
+            if(wrote) return wrote;
+        }
+        wrote = tryCmdChecked(std::string("\"C:\\Program Files\\LLVM\\bin\\llvm-objdump.exe\" -d --no-show-raw-insn ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+    }
+
+    // Try dumpbin as fallback (part of Visual Studio)
+    if(arch=="i386" || arch=="i386:x86-64"){
+        wrote = tryCmdChecked(std::string("dumpbin /DISASM ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+
+        // Try with full path to dumpbin
+        wrote = tryCmdChecked(std::string("\"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\dumpbin.exe\" /DISASM ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+
+        wrote = tryCmdChecked(std::string("\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.39.33519\\bin\\Hostx64\\x64\\dumpbin.exe\" /DISASM ") + q(filePath), outAsm);
+        if(wrote) return wrote;
+    }
+
+    return 0;
+}
+
 static inline size_t disassembleTextOnlyToFile(const std::string& filePath, const std::vector<unsigned char>& buf, const fs::path& outAsm){
 #if defined(_WIN32)
-    return 0;
+    if(isPE(buf)){
+        std::string m = peMachine(buf);
+        return disassembleWithCandidatesWindows(m, filePath, outAsm);
+    }else if(isELF(buf)){
+        // ELF on Windows (cross-compiled or WSL binaries)
+        std::string m = elfMachine(buf);
+        return disassembleWithCandidatesWindows(m, filePath, outAsm);
+    }else{
+        return 0;
+    }
 #else
     if(isELF(buf)){
         std::string m = elfMachine(buf);
@@ -504,7 +601,8 @@ static inline void dumpExecArtifactsIfNeeded(const std::vector<unsigned char>& b
     fs::path finalAsm = outdir / (base + ".asm");
     fs::path chunksDir = outdir / (base + ".chunks");
     writeAll(outBin, buf.data(), buf.size());
-#if !defined(_WIN32)
+
+    // Try to generate ASM file on all platforms
     bool ok = false;
     if(!g_currentSourcePath.empty() && fs::exists(g_currentSourcePath)){
         size_t wrote = disassembleTextOnlyToFile(g_currentSourcePath, buf, tmpAsm);
@@ -517,7 +615,6 @@ static inline void dumpExecArtifactsIfNeeded(const std::vector<unsigned char>& b
         std::error_code ecd2; fs::remove_all(chunksDir, ecd2);
         std::error_code ecd3; fs::remove(finalAsm, ecd3);
     }
-#endif
 }
 
 static inline bool isAllSameByte(const std::vector<unsigned char>& v, uint8_t& val){
