@@ -330,8 +330,21 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                 currentFile = parts[2];
                 scannedFiles = parseInt(parts[3]) || 0;
                 totalFiles = parseInt(parts[4]) || 1;
+
+                // Handle Windows paths that contain colons (e.g., C:\path\file.exe)
+                if (process.platform === 'win32' && parts.length > 4) {
+                  // Reconstruct the full Windows path and get correct numbers
+                  currentFile = parts.slice(2, -2).join(':');
+                  scannedFiles = parseInt(parts[parts.length - 2]) || 0;
+                  totalFiles = parseInt(parts[parts.length - 1]) || 1;
+                }
               } else if (parts[1] === 'START') {
                 currentFile = parts[2];
+
+                // Handle Windows paths that contain colons
+                if (process.platform === 'win32' && parts.length > 3) {
+                  currentFile = parts.slice(2).join(':');
+                }
               } else if (parts[1] === 'COMPLETE') {
                 scannedFiles = totalFiles;
               }
