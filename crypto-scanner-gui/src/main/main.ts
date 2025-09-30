@@ -91,10 +91,6 @@ ipcMain.handle('select-file', async () => {
     properties: ['openFile'],
     title: 'Select File to Scan',
     buttonLabel: 'Select File',
-    filters: [
-      { name: 'All Files', extensions: ['*'] },
-      { name: 'Executable Files', extensions: ['exe', 'bin', 'out', 'app'] },
-    ],
   });
   return result.filePaths[0] || null;
 });
