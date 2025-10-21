@@ -1,0 +1,1411 @@
+{
+  "regex": [
+    {
+      "name": "RSA",
+      "pattern": "\\bRSA(?:-?(?:1024|2048|3072|4096))?\\b|\\bPKCS#?\\s*1\\b|\\bPKCS#?\\s*8\\b|\\bmodulus\\b|\\bpublic\\s+exponent\\b|\\bprivate\\s+exponent\\b",
+      "icase": true
+    },
+    {
+      "name": "RSA exponent 65537",
+      "pattern": "\\b(?:public\\s+exponent\\s*(?:=|:)?\\s*)?(?:65537|0x?10001)\\b",
+      "icase": true
+    },
+    {
+      "name": "ECC/ECDSA/ECDH",
+      "pattern": "\\b(?:ECC|ECDSA|ECDH|EC_KEY|EC_GROUP)\\b|\\bsecp(?:192r1|224r1|224k1|256r1|256k1|384r1|521r1)\\b|\\bP-(?:192|224|256|384|521)\\b|\\b(?:Curve25519|Ed25519|X25519|X448|Ed448)\\b|\\bbrainpoolP(?:256r1|384r1|512r1)\\b",
+      "icase": true
+    },
+    {
+      "name": "DSA",
+      "pattern": "\\b(?:DSA|DSS|Digital\\s+Signature\\s+Algorithm)\\b|\\bDSA_(?:sign|verify)\\b",
+      "icase": true
+    },
+    {
+      "name": "Diffie-Hellman",
+      "pattern": "-----BEGIN DH PARAMETERS-----|\\b(?:Diffie-?Hellman|dhparam|prime\\s+modulus|DH_PRIME|DH_GENERATOR)\\b|\\bDH_(?:generate_parameters|compute_key|check)\\b",
+      "icase": true
+    },
+    {
+      "name": "ElGamal",
+      "pattern": "\\bElGamal(?:\\s+(?:Encryption|Signature))?\\b",
+      "icase": true
+    },
+    {
+      "name": "AES-128/modes",
+      "pattern": "\\bAES(?:[-_]?128)?\\b|\\bRijndael\\b|\\bAdvanced\\s+Encryption\\s+Standard\\b|\\b(?:CBC|GCM|CFB|OFB|CTR|ECB)\\b|\\bAES_set_(?:encrypt|decrypt)_key\\b",
+      "icase": true
+    },
+    {
+      "name": "3DES",
+      "pattern": "\\b(?:3DES|TripleDES|DES|Data\\s+Encryption\\s+Standard)\\b",
+      "icase": true
+    },
+    {
+      "name": "Blowfish/bcrypt",
+      "pattern": "\\bBlowfish\\b",
+      "icase": true
+    },
+    {
+      "name": "bcrypt (password hash marker)",
+      "pattern": "\\$(?:2[aby])\\$\\d\\d\\$[./A-Za-z0-9]{22}",
+      "icase": false
+    },
+    {
+      "name": "RC4",
+      "pattern": "\\b(?:RC4|ARC4|ARCFOUR|RC4_set_key|Rivest\\s+Cipher\\s*4)\\b",
+      "icase": true
+    },
+    {
+      "name": "SHA",
+      "pattern": "\\bSHA(?:[-_]?1|[-_]?224|[-_]?256|[-_]?384|[-_]?512)\\b|\\bSHA1_Init\\b|\\bSHA-?1\\b|\\bSecure\\s+Hash\\s+Algorithm\\s+2\\b",
+      "icase": true
+    },
+    {
+      "name": "MD5",
+      "pattern": "\\bMD5\\b|\\bMD5_Init\\b|\\bMessage\\s+Digest\\s+5\\b|\\bmd5sum\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (rsaEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (rsassaPss)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.10\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-RSAES-OAEP)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.7\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-mgf1)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.8\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-pSpecified)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.9\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (sha256WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.11\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ecPublicKey)",
+      "pattern": "\\b1\\.2\\.840\\.10045\\.2\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ecdsa-with-SHA256)",
+      "pattern": "\\b1\\.2\\.840\\.10045\\.4\\.3\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (secp256r1)",
+      "pattern": "\\b1\\.2\\.840\\.10045\\.3\\.1\\.7\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (secp384r1)",
+      "pattern": "\\b1\\.3\\.132\\.0\\.34\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (secp521r1)",
+      "pattern": "\\b1\\.3\\.132\\.0\\.35\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (secp224r1)",
+      "pattern": "\\b1\\.3\\.132\\.0\\.33\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (secp224k1)",
+      "pattern": "\\b1\\.3\\.132\\.0\\.32\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (secp256k1)",
+      "pattern": "\\b1\\.3\\.132\\.0\\.10\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (brainpoolP256r1)",
+      "pattern": "\\b1\\.3\\.36\\.3\\.3\\.2\\.8\\.1\\.1\\.7\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (brainpoolP384r1)",
+      "pattern": "\\b1\\.3\\.36\\.3\\.3\\.2\\.8\\.1\\.1\\.11\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (brainpoolP512r1)",
+      "pattern": "\\b1\\.3\\.36\\.3\\.3\\.2\\.8\\.1\\.1\\.13\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (X25519)",
+      "pattern": "\\b1\\.3\\.101\\.110\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (X448)",
+      "pattern": "\\b1\\.3\\.101\\.111\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (Ed25519)",
+      "pattern": "\\b1\\.3\\.101\\.112\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (Ed448)",
+      "pattern": "\\b1\\.3\\.101\\.113\\b",
+      "icase": true
+    },
+    {
+      "name": "PEM Header (Generic)",
+      "pattern": "-----BEGIN\\s+(?:RSA\\s+PRIVATE|EC\\s+PRIVATE|DSA\\s+PRIVATE|PRIVATE|PUBLIC|CERTIFICATE|ENCRYPTED PRIVATE)\\s+KEY-----",
+      "icase": true
+    },
+    {
+      "name": "PEM Header (Specific)",
+      "pattern": "-----BEGIN\\s+(?:X509\\s+CERTIFICATE|CERTIFICATE\\s+REQUEST|PKCS7|PKCS12|CMS)-----",
+      "icase": true
+    },
+    {
+      "name": "API (OpenSSL)",
+      "pattern": "\\b(?:EVP_[A-Za-z0-9_]+|RSA_[A-Za-z0-9_]+|EC_KEY_[A-Za-z0-9_]+|EC_GROUP_[A-Za-z0-9_]+|EC_[A-Za-z0-9_]+|DSA_[A-Za-z0-9_]+|DH_[A-Za-z0-9_]+|DES_[A-Za-z0-9_]+|AES_[A-Za-z0-9_]+|RC4_[A-Za-z0-9_]+|MD5_[A-Za-z0-9_]+|SHA(?:1|224|256|384|512)_[A-Za-z0-9_]+|HMAC_[A-Za-z0-9_]+)\\b",
+      "icase": false
+    },
+    {
+      "name": "API (Windows CNG/CAPI)",
+      "pattern": "\\b(?:(?:BCrypt|NCrypt)[A-Za-z0-9_]+|CryptAcquireContext(?:A|W)?|CryptReleaseContext|CryptGenKey|CryptDeriveKey|CryptImportKey|CryptExportKey|CryptCreateHash|CryptHashData|CryptDestroyHash|CryptEncrypt|CryptDecrypt|CryptVerifySignature|CryptSignHash|BCryptGenRandom|Cert(?:Open|Close)Store|CertFindCertificateInStore|CertGetCertificateChain|CertFreeCertificateChain)\\b",
+      "icase": true
+    },
+    {
+      "name": "API (libgcrypt)",
+      "pattern": "\\bgcry_[a-z0-9_]+\\b",
+      "icase": true
+    },
+    {
+      "name": "GOST keywords",
+      "pattern": "\\bGOST\\b|\\bR-?34(?:10|11)-?(?:94|2001|2012)\\b|\\bStreebog\\b|\\bGOSTR?3410\\b|\\bGOSTR?3411\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (md2WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (md4WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (md5WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.4\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (sha224WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.14\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (sha384WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.12\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (sha512WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.13\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (sha512_224WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.15\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (sha512_256WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.16\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (gostR3410-2001)",
+      "pattern": "\\b1\\.2\\.643\\.2\\.2\\.19\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (gostR3410-94)",
+      "pattern": "\\b1\\.2\\.643\\.2\\.2\\.20\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (gostR3411-94)",
+      "pattern": "\\b1\\.2\\.643\\.2\\.2\\.9\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (gostR3411-94-with-gostR3410-2001)",
+      "pattern": "\\b1\\.2\\.643\\.2\\.2\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (gostR3411-94-with-gostR3410-94)",
+      "pattern": "\\b1\\.2\\.643\\.2\\.2\\.4\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-tc26-gost3410-12-256)",
+      "pattern": "\\b1\\.2\\.643\\.7\\.1\\.1\\.1\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-tc26-gost3410-12-512)",
+      "pattern": "\\b1\\.2\\.643\\.7\\.1\\.1\\.1\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-tc26-gost3411-12-256)",
+      "pattern": "\\b1\\.2\\.643\\.7\\.1\\.1\\.2\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-tc26-gost3411-12-512)",
+      "pattern": "\\b1\\.2\\.643\\.7\\.1\\.1\\.2\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-tc26-signwithdigest-gost3410-12-256)",
+      "pattern": "\\b1\\.2\\.643\\.7\\.1\\.1\\.3\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-tc26-signwithdigest-gost3410-12-512)",
+      "pattern": "\\b1\\.2\\.643\\.7\\.1\\.1\\.3\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (pbeWithMD2AndDES-CBC)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.5\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (pbeWithMD5AndDES-CBC)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.5\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "ECC binary curves sect*",
+      "pattern": "\\bsect(?:163|233|283|409|571)(?:k1|r1|r2)\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ecdsa-with-SHA224)",
+      "pattern": "\\b1\\.2\\.840\\.10045\\.4\\.3\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (dhSinglePass-stdDH-sha224kdf-scheme)",
+      "pattern": "\\b1\\.3\\.132\\.1\\.11\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (dhSinglePass-stdDH-sha256kdf-scheme)",
+      "pattern": "\\b1\\.3\\.132\\.1\\.11\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (dhSinglePass-stdDH-sha384kdf-scheme)",
+      "pattern": "\\b1\\.3\\.132\\.1\\.11\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (dhSinglePass-stdDH-sha512kdf-scheme)",
+      "pattern": "\\b1\\.3\\.132\\.1\\.11\\.4\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (dhSinglePass-cofactorDH-sha1kdf-scheme)",
+      "pattern": "\\b1\\.3\\.132\\.1\\.12\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-alg-ESDH)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.9\\.16\\.3\\.5\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-alg-ESDHwith3DES)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.9\\.16\\.3\\.15\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-alg-SDHW)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.9\\.16\\.3\\.16\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-alg-ESDHwithAES128)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.9\\.16\\.3\\.17\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-alg-ESDHwithAES192)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.9\\.16\\.3\\.18\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (id-alg-ESDHwithAES256)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.9\\.16\\.3\\.19\\b",
+      "icase": true
+    },
+    {
+      "name": "X25519 A decimal",
+      "pattern": "\\b486662\\b",
+      "icase": false
+    },
+    {
+      "name": "X448 A decimal",
+      "pattern": "\\b156326\\b",
+      "icase": false
+    },
+    {
+      "name": "Java: initialize(weak key size) (var call, near KPG)",
+      "pattern": "KeyPairGenerator(?:.|\\n){0,4000}?\\.\\s*initialize\\s*\\((512|768|1024)\\)",
+      "icase": false
+    },
+    {
+      "name": "Java: initialize(weak key size) (line direct)",
+      "pattern": "\\binitialize\\s*\\((512|768|1024)\\)\\s*;?",
+      "icase": false
+    },
+    {
+      "name": "OID dotted (sha1WithRSAEncryption)",
+      "pattern": "\\b1\\.2\\.840\\.113549\\.1\\.1\\.5\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (dsa)",
+      "pattern": "\\b1\\.2\\.840\\.10040\\.4\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (dsaWithSHA1)",
+      "pattern": "\\b1\\.2\\.840\\.10040\\.4\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ecdsa-with-SHA1)",
+      "pattern": "\\b1\\.2\\.840\\.10045\\.4\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ecdsa-with-SHA384)",
+      "pattern": "\\b1\\.2\\.840\\.10045\\.4\\.3\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ecdsa-with-SHA512)",
+      "pattern": "\\b1\\.2\\.840\\.10045\\.4\\.3\\.4\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted has160",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted seedECB",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted seedCBC",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.4\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted seedCBCWithSHA1",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.15\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted kcdsa1",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.21\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted kcdsa1WithHAS160",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.22\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted kcdsa1WithSHA1",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.23\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted ecdsaWithHAS160",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.24\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted kcdsaWithSHA256",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.27\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted seedECBWithSHA256",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.32\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted seedCBCWithSHA256",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.33\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted seedOFBWithSHA256",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.34\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted seedCFBWithSHA256",
+      "pattern": "\\b1\\.2\\.410\\.200004\\.1\\.35\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (gpki-alg neat)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.1\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (neatECB)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.2\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (neatCBC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.3\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (neatOFB)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.4\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (neatCFB)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.5\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (neatMAC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.6\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (pbeWithSHA1AndNEAT_CBC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.7\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (pbeWithHAS160AndNEAT_CBC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.8\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ARIA-128)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.18\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ARIA-128-ECB)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.19\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ARIA-128-CBC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.20\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ARIA-128-OFB)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.21\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ARIA-128-CFB)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.22\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (ARIA-128-MAC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.23\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (pbesWithSHA1AndARIA-128-CBC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.24\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (pbesWithSHA256AndARIA-128-CBC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.25\\b",
+      "icase": true
+    },
+    {
+      "name": "OID dotted (pbesWithHAS160AndARIA-128-CBC)",
+      "pattern": "\\b1\\.2\\.410\\.100001\\.1\\.26\\b",
+      "icase": true
+    },
+    {
+      "name": "X25519 basepoint u=9",
+      "pattern": "\\bu\\s*=\\s*9\\b",
+      "icase": true
+    },
+    {
+      "name": "X448 basepoint u=5",
+      "pattern": "\\bu\\s*=\\s*5\\b",
+      "icase": true
+    },
+    {
+      "name": "BouncyCastle Provider",
+      "pattern": "\\borg[./]bouncycastle[./]jce[./]provider[./]BouncyCastleProvider\\b|\\borg\\.bouncycastle\\.jce\\.provider\\.BouncyCastleProvider\\b",
+      "icase": true
+    },
+    {
+      "name": "BouncyCastle RSA",
+      "pattern": "\\borg[./]bouncycastle[./]crypto[./](engines[./]RSAEngine|signers[./]RSADigestSigner|params[./]RSAKeyParameters)\\b|\\borg\\.bouncycastle\\.crypto\\.(engines\\.RSAEngine|signers\\.RSADigestSigner|params\\.(RSAKeyParameters))\\b",
+      "icase": true
+    },
+    {
+      "name": "BouncyCastle EC/ECDSA",
+      "pattern": "\\borg[./]bouncycastle[./]crypto[./](signers[./]ECDSASigner|params[./](ECPrivateKeyParameters|ECPublicKeyParameters))\\b|\\borg\\.bouncycastle\\.crypto\\.(signers\\.ECDSASigner|params\\.(ECPrivateKeyParameters|ECPublicKeyParameters))\\b",
+      "icase": true
+    },
+    {
+      "name": "BouncyCastle Curves",
+      "pattern": "\\borg[./]bouncycastle[./]asn1[./](x9|nist)[./](ECNamedCurveTable|X9ECParameters|NISTNamedCurves)\\b|\\borg\\.bouncycastle\\.asn1\\.(x9|nist)\\.(ECNamedCurveTable|X9ECParameters|NISTNamedCurves)\\b",
+      "icase": true
+    },
+    {
+      "name": "BouncyCastle AES/GCM",
+      "pattern": "\\borg[./]bouncycastle[./]crypto[./](engines[./](AESEngine|GCMBlockCipher|SICBlockCipher)|modes[./]GCMBlockCipher)\\b|\\borg\\.bouncycastle\\.crypto\\.(engines\\.(AESEngine|GCMBlockCipher|SICBlockCipher)|modes\\.GCMBlockCipher)\\b",
+      "icase": true
+    },
+    {
+      "name": "BouncyCastle TLS",
+      "pattern": "\\borg[./]bouncycastle[./]tls[./](TLSClient|TLSServer|DefaultTlsClient|DefaultTlsServer)\\b|\\borg\\.bouncycastle\\.tls\\.(TLSClient|TLSServer|DefaultTlsClient|DefaultTlsServer)\\b",
+      "icase": true
+    },
+    {
+      "name": "C/C++ AES-NI intrinsics (GCC/Clang/MSVC)",
+      "pattern": "\\b_mm_(?:aesenc|aesenclast|aesdec|aesdeclast|aesimc|aeskeygenassist)_si128\\b",
+      "icase": true
+    },
+    {
+      "name": "C/C++ CLMUL intrinsic (GCM GHASH hint)",
+      "pattern": "\\b_mm_clmulepi64_si128\\b",
+      "icase": true
+    },
+    {
+      "name": "OpenSSL AES-NI/CLMUL symbol hint",
+      "pattern": "\\b(?:aesni_\\w+|ghash_?clmul(?:ni)?_?intel)\\b",
+      "icase": true
+    },
+    {
+      "name": "Java Cipher transforms (AES modes incl. GCM)",
+      "pattern": "\\bAES\\/(?:GCM|CTR|CBC|CFB|OFB|ECB)\\/(?:NoPadding|PKCS5Padding)\\b",
+      "icase": true
+    }
+  ],
+  "bytes": [
+    {
+      "name": "OID DER (rsaEncryption)",
+      "hex": "06092A864886F70D010101",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (rsassaPss)",
+      "hex": "06092A864886F70D01010A",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-RSAES-OAEP)",
+      "hex": "06092A864886F70D010107",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-mgf1)",
+      "hex": "06092A864886F70D010108",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-pSpecified)",
+      "hex": "06092A864886F70D010109",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha1WithRSAEncryption)",
+      "hex": "06092A864886F70D010105",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha256WithRSAEncryption)",
+      "hex": "06092A864886F70D01010B",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ecPublicKey)",
+      "hex": "06072A8648CE3D0201",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ecdsa-with-SHA1)",
+      "hex": "06072A8648CE3D0401",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ecdsa-with-SHA224)",
+      "hex": "06082A8648CE3D040301",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ecdsa-with-SHA256)",
+      "hex": "06082A8648CE3D040302",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ecdsa-with-SHA384)",
+      "hex": "06082A8648CE3D040303",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ecdsa-with-SHA512)",
+      "hex": "06082A8648CE3D040304",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (secp256r1)",
+      "hex": "06082A8648CE3D030107",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (secp384r1)",
+      "hex": "06052B81040022",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (secp521r1)",
+      "hex": "06052B81040023",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (secp224r1)",
+      "hex": "06052B81040021",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (secp224k1)",
+      "hex": "06052B81040020",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (secp256k1)",
+      "hex": "06052B8104000A",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (brainpoolP256r1)",
+      "hex": "06092B2403030208010107",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (brainpoolP384r1)",
+      "hex": "06092B240303020801010B",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (brainpoolP512r1)",
+      "hex": "06092B240303020801010D",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (X25519)",
+      "hex": "06032B656E",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (X448)",
+      "hex": "06032B656F",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (Ed25519)",
+      "hex": "06032B6570",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (Ed448)",
+      "hex": "06032B6571",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (dhKeyAgreement)",
+      "hex": "06092A864886F70D010301",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (md5)",
+      "hex": "06082A864886F70D0205",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha1)",
+      "hex": "06052B0E03021A",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha256)",
+      "hex": "0609608648016503040201",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (des-ede3-cbc)",
+      "hex": "06082A864886F70D0307",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (rc4)",
+      "hex": "06082A864886F70D0304",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (md2WithRSAEncryption)",
+      "hex": "06092A864886F70D010102",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (md4WithRSAEncryption)",
+      "hex": "06092A864886F70D010103",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (md5WithRSAEncryption)",
+      "hex": "06092A864886F70D010104",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha224WithRSAEncryption)",
+      "hex": "06092A864886F70D01010E",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha384WithRSAEncryption)",
+      "hex": "06092A864886F70D01010C",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha512WithRSAEncryption)",
+      "hex": "06092A864886F70D01010D",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha512_224WithRSAEncryption)",
+      "hex": "06092A864886F70D01010F",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (sha512_256WithRSAEncryption)",
+      "hex": "06092A864886F70D010110",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (gostR3410-2001)",
+      "hex": "06072A85030213",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (gostR3410-94)",
+      "hex": "06072A85030214",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (gostR3411-94)",
+      "hex": "06072A85030209",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (gostR3411-94-with-gostR3410-2001)",
+      "hex": "06072A85030203",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (gostR3411-94-with-gostR3410-94)",
+      "hex": "06072A85030204",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-tc26-gost3410-12-256)",
+      "hex": "060A2A85070701010101",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-tc26-gost3410-12-512)",
+      "hex": "060A2A85070701010102",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-tc26-gost3411-12-256)",
+      "hex": "060A2A85070701010202",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-tc26-gost3411-12-512)",
+      "hex": "060A2A85070701010203",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-tc26-signwithdigest-gost3410-12-256)",
+      "hex": "060A2A85070701010302",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (id-tc26-signwithdigest-gost3410-12-512)",
+      "hex": "060A2A85070701010303",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (pbeWithMD2AndDES-CBC)",
+      "hex": "06092A864886F70D010501",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (pbeWithMD5AndDES-CBC)",
+      "hex": "06092A864886F70D010503",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (has160)",
+      "hex": "06082A831A8C9A440102",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (seedECB)",
+      "hex": "06082A831A8C9A440103",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (seedCBC)",
+      "hex": "06082A831A8C9A440104",
+      "type": "oid"
+    },
+    {
+      "name": "seedCBCWithSHA1",
+      "hex": "06082A831A8C9A44010F",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (kcdsa1)",
+      "hex": "06082A831A8C9A440115",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (kcdsa1WithHAS160)",
+      "hex": "06082A831A8C9A440116",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (kcdsa1WithSHA1)",
+      "hex": "06082A831A8C9A440117",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ecdsaWithHAS160)",
+      "hex": "06082A831A8C9A440118",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (kcdsaWithSHA256)",
+      "hex": "06082A831A8C9A44011B",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (seedECBWithSHA256)",
+      "hex": "06082A831A8C9A440120",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (seedCBCWithSHA256)",
+      "hex": "06082A831A8C9A440121",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (seedOFBWithSHA256)",
+      "hex": "06082A831A8C9A440122",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (seedCFBWithSHA256)",
+      "hex": "06082A831A8C9A440123",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (gpki-alg neat)",
+      "hex": "06082A831A868D210101",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (neatECB)",
+      "hex": "06082A831A868D210102",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (neatCBC)",
+      "hex": "06082A831A868D210103",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (neatOFB)",
+      "hex": "06082A831A868D210104",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (neatCFB)",
+      "hex": "06082A831A868D210105",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (neatMAC)",
+      "hex": "06082A831A868D210106",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (pbeWithSHA1AndNEAT_CBC)",
+      "hex": "06082A831A868D210107",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (pbeWithHAS160AndNEAT_CBC)",
+      "hex": "06082A831A868D210108",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ARIA-128)",
+      "hex": "06082A831A868D210112",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ARIA-128-ECB)",
+      "hex": "06082A831A868D210113",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ARIA-128-CBC)",
+      "hex": "06082A831A868D210114",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ARIA-128-OFB)",
+      "hex": "06082A831A868D210115",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ARIA-128-CFB)",
+      "hex": "06082A831A868D210116",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (ARIA-128-MAC)",
+      "hex": "06082A831A868D210117",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (pbesWithSHA1AndARIA-128-CBC)",
+      "hex": "06082A831A868D210118",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (pbesWithSHA256AndARIA-128-CBC)",
+      "hex": "06082A831A868D210119",
+      "type": "oid"
+    },
+    {
+      "name": "OID DER (pbesWithHAS160AndARIA-128-CBC)",
+      "hex": "06082A831A868D21011A",
+      "type": "oid"
+    },
+    {
+      "name": "Prime (secp256r1)",
+      "hex": "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF",
+      "type": "prime"
+    },
+    {
+      "name": "Prime (secp384r1)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFF0000000000000000FFFFFFFF",
+      "type": "prime"
+    },
+    {
+      "name": "Prime (secp521r1)",
+      "hex": "01FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "type": "prime"
+    },
+    {
+      "name": "Prime (secp224r1)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF000000000000000000000001",
+      "type": "prime"
+    },
+    {
+      "name": "Prime (secp224k1)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFE56D",
+      "type": "prime"
+    },
+    {
+      "name": "Prime (secp256k1)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F",
+      "type": "prime"
+    },
+    {
+      "name": "Prime (X25519)",
+      "hex": "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED",
+      "type": "prime"
+    },
+    {
+      "name": "Prime (X448)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "type": "prime"
+    },
+    {
+      "name": "CurveParam (secp256r1 a)",
+      "hex": "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256r1 b)",
+      "hex": "5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256r1 Gx)",
+      "hex": "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256r1 Gy)",
+      "hex": "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162CB08D4B10D1B3EBAAEAE35B7AC90FB0",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256r1 n)",
+      "hex": "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp384r1 a)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFF0000000000000000FFFFFFFC",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp384r1 b)",
+      "hex": "B3312FA7E23EE7E4988E056BE3F82D19181D9C6EFE8141120314088F5013875AC656398D8A2ED19D2A85C8EDD3EC2AEF",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp384r1 Gx)",
+      "hex": "AA87CA22BE8B05378EB1C71EF320AD746E1D3B628BA79B9859F741E082542A385502F25DBF55296C3A545E3872760AB7",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp384r1 Gy)",
+      "hex": "3617DE4A96262C6F5D9E98BF9292DC29F8F41DBD289A147CE9DA3113B5F0B8C00A60B1CE1D7E819D7A431D7C90EA0E5F",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp384r1 n)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFC7634D81F4372DDF581A0DB248B0A77AECEC196ACCC52973",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp521r1 a)",
+      "hex": "01FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFC",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp521r1 b)",
+      "hex": "0051953EB9618E1C9A1F929A21A0B68540EEA2DA725B99B315F3B8B489918EF109E156193951EC7E937B1652C0BD3BB1BF073573DF883D2C34F1EF451FD46B503F00",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp521r1 Gx)",
+      "hex": "00C6868E06B70404E9CD9E3ECB662395B4429C648139053FB521F828AF606B4D3DBAA14B5E77EFE75928FE1DC127A2FFA8DE3348B3C1856A429BF97E7E31C2E5BD66",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp521r1 Gy)",
+      "hex": "011839296A789A3BC0045C8A5FB42C7D1BD998F54449579B446817AFBD17273E662C97EE72995EF42640C550B9013FAD0761353C7086A272C24088BE94769FD16650",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp521r1 n)",
+      "hex": "01FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA51868783BF2F966B7FCC0148F709A5D03BB5C9B8899C47AEBB6FB71E91386409",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224r1 a)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFE",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224r1 b)",
+      "hex": "B4050A850C04B3ABF54132565044B0B7D7BFD8BA270B39432355FFB4",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224r1 Gx)",
+      "hex": "B70E0CBD6BB4BF7F321390B94A03C1D356C21122343280D6115C1D21",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224r1 Gy)",
+      "hex": "BD376388B5F723FB4C22DFE6CD4375A05A07476444D5819985007E34",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224r1 n)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFF16A2E0B8F03E13DD29455C5C2A3D",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256k1 a)",
+      "hex": "00000000000000000000000000000000000000000000000000000000",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224k1 b)",
+      "hex": "00000000000000000000000000000000000000000000000000000005",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224k1 Gx)",
+      "hex": "A1455B334DF099DF30FC28A169A467E9E47075A90F7E650EB6B7A45C",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224k1 Gy)",
+      "hex": "7E089FED7FBA344282CAFBD6176B4611A05A6DECE5D5A8253DCB83C3",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp224k1 n)",
+      "hex": "01000000000000000000000000001DCE8D2EC6184CAF0A971769FB1F7",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256k1 a)",
+      "hex": "00000000000000000000000000000000000000000000000000000000",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256k1 b)",
+      "hex": "00000000000000000000000000000000000000000000000000000007",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256k1 Gx)",
+      "hex": "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256k1 Gy)",
+      "hex": "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (secp256k1 n)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (X25519 A)",
+      "hex": "076D06",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (X25519 u_le32)",
+      "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (X448 A)",
+      "hex": "0262A6",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (X448 u_le56)",
+      "hex": "0500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "type": "curve_param"
+    },
+    {
+      "name": "Prime (brainpoolP256r1)",
+      "hex": "A9FB57DBA1EEA9BC3E660A909D838D726E3BF623D52620282013481D1F6E5377",
+      "type": "prime"
+    },
+    {
+      "name": "CurveParam (brainpoolP256r1 a)",
+      "hex": "7D5A0975FC2C3057EEF67530417AFFE7FB8055C126DC5C6CE94A4B44F330B5D9",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP256r1 b)",
+      "hex": "26DC5C6CE94A4B44F330B5D9BBD77CBF958416295CF7E1CE6BCCDC18FF8C07B6",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP256r1 Gx)",
+      "hex": "8BD2AEB9CB7E57CB2C4B482FFC81B7AFB9DE27E1E3BD23C23A4453BD9ACE3262",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP256r1 Gy)",
+      "hex": "547EF835C3DAC4FD97F8461A14611DC9C27745132DED8E545C1D54C72F046997",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP256r1 n)",
+      "hex": "A9FB57DBA1EEA9BC3E660A909D838D718C397AA3B561A6F7901E0E82974856A7",
+      "type": "curve_param"
+    },
+    {
+      "name": "Prime (brainpoolP384r1)",
+      "hex": "8CB91E82A3386D280F5D6F7E50E641DF152F7109ED5456B412B1DA197FB71123ACD3A729901D1A71874700133107EC53",
+      "type": "prime"
+    },
+    {
+      "name": "CurveParam (brainpoolP384r1 a)",
+      "hex": "7BC382C63D8C150C3C72080ACE05B173FCF061C3",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP384r1 b)",
+      "hex": "04A8C7DD22CE2826E2C90F3EF8C745D3D6D4D3E3",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP384r1 Gx)",
+      "hex": "1D1C64F068CF45FFA2A63A81B7C13F6B8847C11E6D6D867CFB6C79F521F828AF",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP384r1 Gy)",
+      "hex": "8ABE1D7520DA8C3686DD34F56B2A63CFE4CEED5C2E31C9FF2FDCB3F0BF6D3C1C",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP384r1 n)",
+      "hex": "8CB91E82A3386D280F5D6F7E50E641DF152F7109ED5456B3C8E9BD709E032DBF",
+      "type": "curve_param"
+    },
+    {
+      "name": "Prime (brainpoolP512r1)",
+      "hex": "AADD9DB8DBE9C48B3FD4E6AE33C9FC07CB308DB3B3C9D20ED6639CCA703308717D4D9B009BC66842AECDA12AE6A380E6",
+      "type": "prime"
+    },
+    {
+      "name": "CurveParam (brainpoolP512r1 a)",
+      "hex": "7830A3318B603B89E2327145AC234CC5097663980F8740BC0D9B67D1E5FD5E43",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP512r1 b)",
+      "hex": "3DF91610A83441CAEA9863C6A9E2254B7E5DA7FDE8DBBE78FE1DC127A2FFA8DE",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP512r1 Gx)",
+      "hex": "81AEE4BDD82ED9645A21321C250CDA06C84B9AD0A4C9D8D97D89D263E3760C46",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP512r1 Gy)",
+      "hex": "7DDE385D566332ECBAA1E1701AE91D2E4C4B6D6DB48161B24DF3EC36D30F4097",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (brainpoolP512r1 n)",
+      "hex": "AADD9DB8DBE9C48B3FD4E6AE33C9FC07CB308DB3B3C9D20ED6639CCA7033087057C57D5FE1231E8C94C49E3BE15E8E70",
+      "type": "curve_param"
+    },
+    {
+      "name": "Prime (Ed25519)",
+      "hex": "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed25519 a)",
+      "hex": "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEC",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed25519 d)",
+      "hex": "52036CEE2B6FFE738CC740797779E89800700A4D4141D8AB75EB4DCA135978A3",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed25519 Gx)",
+      "hex": "216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D51A",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed25519 Gy)",
+      "hex": "6666666666666666666666666666666666666666666666666666666666666658",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed25519 n)",
+      "hex": "1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED",
+      "type": "curve_param"
+    },
+    {
+      "name": "Prime (Ed448)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed448 a)",
+      "hex": "01",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed448 d)",
+      "hex": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF6756",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed448 Gx)",
+      "hex": "4F1970C66BED0DED221D15A622BF36DA9E146570470F1767EA6DE324A3D3A46412AE1AF72AB66511433B80E18B00938E2626A82BC70CC05E",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed448 Gy)",
+      "hex": "693F46716EB6BC248876203756C9C7624BEA73736CA3984087789C1E05A0C2D73AD3FF1CE67C39C4FDBD132C4ED7C8AD9808795BF230FA14",
+      "type": "curve_param"
+    },
+    {
+      "name": "CurveParam (Ed448 n)",
+      "hex": "3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7CCA23E9C44EDB49AED63690216CC2728DC58F552378C292AB5844F3",
+      "type": "curve_param"
+    }
+  ]
+}
