@@ -3,6 +3,8 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cerrno>
+#include <unistd.h>
 
 namespace {
 
@@ -18,7 +20,7 @@ void hook_log(const char* fmt, ...) {
     }
     va_list args;
     va_start(args, fmt);
-    std::vdprintf(stderr_fd(), fmt, args);
+    ::vdprintf(stderr_fd(), fmt, args);
     va_end(args);
 }
 

@@ -187,7 +187,10 @@ elseif(APPLE)
 else()
     # Linux-specific compile options
     target_compile_options(hook PRIVATE -O2 -fPIC -fno-omit-frame-pointer -Wall -Wextra)
-    target_link_libraries(hook PRIVATE dl pthread OpenSSL::Crypto)
+    # Link with -ldl explicitly using ${CMAKE_DL_LIBS}
+    target_link_libraries(hook PRIVATE ${CMAKE_DL_LIBS} pthread OpenSSL::Crypto)
+    # Ensure dlsym and dlopen are available
+    target_link_options(hook PRIVATE -Wl,--no-as-needed)
 endif()
 
 # Java 지원이 가능한 경우 JNI 라이브러리 링크

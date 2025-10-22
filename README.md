@@ -33,7 +33,7 @@ CryptoScanner_GUI/
 sudo apt update
 
 # 필요한 패키지 설치
-sudo apt install build-essential qtbase5-dev libssl-dev pkg-config nodejs clang
+sudo apt install build-essential qtbase5-dev libssl-dev pkg-config nodejs clang cmake
 ```
 
 ### 2️⃣ 저장소 복제

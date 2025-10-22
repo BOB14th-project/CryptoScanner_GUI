@@ -358,13 +358,26 @@ static fn_dlsym real_dlsym_ptr = nullptr;
 static fn_dlsym get_real_dlsym() {
     if (!real_dlsym_ptr) {
 #ifdef __GLIBC__
-        real_dlsym_ptr = reinterpret_cast<fn_dlsym>(dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.2.5"));
+        // Try different GLIBC versions depending on architecture
+        const char* versions[] = {
+            "GLIBC_2.34",  // Latest glibc
+            "GLIBC_2.17",  // ARM64/AARCH64
+            "GLIBC_2.3",   // x86_64 older
+            "GLIBC_2.2.5", // x86_64 oldest
+            nullptr
+        };
+
+        for (int i = 0; versions[i] != nullptr; i++) {
+            real_dlsym_ptr = reinterpret_cast<fn_dlsym>(dlvsym(RTLD_NEXT, "dlsym", versions[i]));
+            if (real_dlsym_ptr) break;
+        }
+
         if (!real_dlsym_ptr) {
             void* libdl = dlopen("libdl.so.2", RTLD_LAZY | RTLD_LOCAL);
             if (libdl) {
-                real_dlsym_ptr = reinterpret_cast<fn_dlsym>(dlvsym(libdl, "dlsym", "GLIBC_2.2.5"));
-                if (!real_dlsym_ptr) {
-                    real_dlsym_ptr = reinterpret_cast<fn_dlsym>(dlvsym(libdl, "dlsym", "GLIBC_2.3"));
+                for (int i = 0; versions[i] != nullptr; i++) {
+                    real_dlsym_ptr = reinterpret_cast<fn_dlsym>(dlvsym(libdl, "dlsym", versions[i]));
+                    if (real_dlsym_ptr) break;
                 }
             }
         }
