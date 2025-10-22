@@ -43,19 +43,21 @@ sudo apt install build-essential qtbase5-dev libssl-dev pkg-config nodejs clang 
 git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 ```
 
-### 3️⃣ 백엔드 빌드
+### 3️⃣ 백엔드 빌드, 정적탐지 및 동적탐지 통합 빌드
 
 ```bash
 # 백엔드 빌드
 cd CryptoScanner_GUI/CryptoScanner
-
 ./mac_linux_amd_arm.sh
+
+cd ../
+./build_integrated.sh
 ```
 
 ### 4️⃣ GUI 설치
 
 ```bash
-cd ../crypto-scanner-gui
+cd crypto-scanner-gui
 
 # npm 명령어
 npm install
@@ -177,17 +179,20 @@ sudo ln -sf /opt/homebrew/bin/llvm-objdump /opt/homebrew/bin/objdump
 git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 ```
 
-### 3️⃣ 백엔드 빌드
+### 3️⃣ 백엔드 빌드, 정적탐지 및 동적탐지 통합 빌드
 
 ```bash
 cd CryptoScanner_GUI/CryptoScanner
 ./mac_linux_amd_arm.sh
+
+cd ../
+./build_integrated.sh
 ```
 
 ### 4️⃣ GUI 설치 및 실행
 
 ```bash
-cd ../crypto-scanner-gui
+cd crypto-scanner-gui
 
 # npm 명령어
 npm install
