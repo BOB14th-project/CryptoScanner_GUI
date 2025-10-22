@@ -328,7 +328,7 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
   console.log('=== start-scan IPC called ===');
   return new Promise((resolve, reject) => {
     // Simplified binary path handling for Windows
-    const binaryName = process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScanner';
+    const binaryName = process.platform === 'win32' ? 'CryptoScannerCLI.exe' : 'CryptoScannerCLI';
 
     console.log('Looking for CryptoScanner binary...');
     console.log('__dirname:', __dirname);
@@ -450,6 +450,9 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
             }
           } catch (fileErr) {
             // file 명령어 실패 시 확장자와 권한으로 폴백
+            if (process.platform === 'linux') {
+              console.log(`[Linux] file command failed for ${filePath}, using fallback. hasExecBit=${hasExecBit}, ext=${ext}`);
+            }
             if (process.platform === 'win32') {
               return ['.exe', '.com', '.dll'].includes(ext);
             } else if (process.platform === 'darwin') {
@@ -470,7 +473,11 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
         if (!filePath) {
           return;
         }
-        if (isExecutableFile(filePath)) {
+        const isExec = isExecutableFile(filePath);
+        if (process.platform === 'linux') {
+          console.log(`[Linux] trackExecutableCandidate: ${filePath} -> ${isExec}`);
+        }
+        if (isExec) {
           executableCandidates.add(filePath);
         }
       };
@@ -835,6 +842,10 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
             // 폴더 스캔인 경우: 정적 탐지에서 발견된 실행 파일들에 대해 동적 탐지 수행
             else if (stat.isDirectory()) {
               console.log('Folder scan detected. Analyzing executable files for dynamic analysis...');
+              if (process.platform === 'linux') {
+                console.log(`[Linux] Number of detections: ${detections.length}`);
+                console.log(`[Linux] Executable candidates before tracking detections: ${executableCandidates.size}`);
+              }
 
               // Ensure detection file paths are tracked as candidates
               for (const detection of detections) {
@@ -845,6 +856,9 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
               const executableFiles = new Set<string>(executableCandidates);
 
               console.log(`Found ${executableFiles.size} executable files to analyze dynamically`);
+              if (process.platform === 'linux') {
+                console.log(`[Linux] Executable files list:`, Array.from(executableFiles));
+              }
 
               // 각 실행 파일에 대해 동적 탐지 수행
               for (const execPath of executableFiles) {
