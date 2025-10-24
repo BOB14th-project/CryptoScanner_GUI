@@ -6,6 +6,7 @@ console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
 
 let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
+let dynamicAnalysisProcess: ChildProcess | null = null;
 
 function createWindow(): void {
   let preloadPath = path.join(__dirname, 'preload.js');
@@ -95,11 +96,287 @@ ipcMain.handle('select-file', async () => {
   return result.filePaths[0] || null;
 });
 
+// 동적 탐지 실행 함수
+async function runDynamicAnalysis(targetPath: string, scannerDir: string): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const binaryName = process.platform === 'win32' ? 'dynamic_analysis_cli.exe' : 'dynamic_analysis_cli';
+    let dynamicAnalysisPath: string;
+
+    if (process.resourcesPath) {
+      dynamicAnalysisPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', binaryName);
+    } else {
+      dynamicAnalysisPath = path.join(__dirname, binaryName);
+    }
+
+    const fs = require('fs');
+    const pathCandidates = [
+      dynamicAnalysisPath,
+      path.join(__dirname, binaryName),
+      path.join(__dirname, '..', binaryName),
+      path.join(scannerDir, binaryName),
+    ];
+
+    let resolvedBinaryPath = '';
+    for (const candidate of pathCandidates) {
+      if (fs.existsSync(candidate)) {
+        resolvedBinaryPath = candidate;
+        break;
+      }
+    }
+
+    if (!resolvedBinaryPath) {
+      console.log('Dynamic analysis not available, skipping...');
+      resolve([]);
+      return;
+    }
+
+    dynamicAnalysisPath = resolvedBinaryPath;
+    const binaryDir = path.dirname(dynamicAnalysisPath);
+    console.log('✅ Using dynamic analysis binary at:', dynamicAnalysisPath);
+
+    // 실행 파일인지 확인
+    const stat = fs.statSync(targetPath);
+    if (!stat.isFile()) {
+      console.log('Target is not a file, skipping dynamic analysis');
+      resolve([]);
+      return;
+    }
+
+    // 실행 파일 확장자 및 실행 권한 확인
+    const ext = path.extname(targetPath).toLowerCase();
+    const hasExecBit = (stat.mode & 0o111) !== 0;
+
+    // file 명령어로 실제 실행 파일 타입 확인
+    let isExecutableForCurrentPlatform = false;
+
+    try {
+      const { execSync } = require('child_process');
+      const fileOutput = execSync(`file "${targetPath}"`, { encoding: 'utf-8' });
+      console.log('File type check:', fileOutput.trim());
+
+      if (process.platform === 'darwin') {
+        // macOS: Mach-O 파일만 실행 가능
+        if (fileOutput.includes('Mach-O')) {
+          isExecutableForCurrentPlatform = true;
+        } else {
+          console.log('Skipping: Not a macOS executable (not Mach-O)');
+        }
+      } else if (process.platform === 'linux') {
+        // Linux: ELF 파일만 실행 가능
+        if (fileOutput.includes('ELF')) {
+          isExecutableForCurrentPlatform = true;
+        } else {
+          console.log('Skipping: Not a Linux executable (not ELF)');
+        }
+      } else if (process.platform === 'win32') {
+        // Windows: PE 파일만 실행 가능
+        if (fileOutput.includes('PE32') || fileOutput.includes('MS-DOS')) {
+          isExecutableForCurrentPlatform = true;
+        } else {
+          console.log('Skipping: Not a Windows executable (not PE32)');
+        }
+      }
+    } catch (err) {
+      // file 명령어 실패 시 확장자로 폴백
+      console.log('file command failed, falling back to extension check:', err);
+
+      if (process.platform === 'win32') {
+        isExecutableForCurrentPlatform = ['.exe', '.dll', '.com'].includes(ext);
+      } else {
+        const isLibrary = ['.so', '.dylib'].includes(ext);
+        isExecutableForCurrentPlatform = hasExecBit || isLibrary;
+      }
+    }
+
+    if (!isExecutableForCurrentPlatform) {
+      console.log('Target is not executable on this platform, skipping dynamic analysis');
+      resolve([]);
+      return;
+    }
+
+    console.log('Starting dynamic analysis for:', targetPath);
+
+    // NDJSON 로그 파일 경로 설정
+    const logsDir = path.join(scannerDir, 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logFile = path.join(logsDir, `dynamic_${timestamp}.ndjson`);
+
+    // libhook.dylib의 절대 경로
+    const hookLibName = process.platform === 'darwin' ? 'libhook.dylib' :
+                       (process.platform === 'win32' ? 'hook.dll' : 'libhook.so');
+    const hookSearchPaths = [
+      path.join(binaryDir, hookLibName),
+      path.join(scannerDir, hookLibName),
+      path.join(process.resourcesPath || '', 'app.asar.unpacked', 'dist', 'main', hookLibName),
+      path.join(__dirname, hookLibName),
+      path.join(__dirname, '..', hookLibName),
+    ];
+
+    let hookLibPath: string | null = null;
+    for (const candidate of hookSearchPaths) {
+      if (candidate && fs.existsSync(candidate)) {
+        hookLibPath = candidate;
+        console.log('✅ Using hook library at:', hookLibPath);
+        break;
+      }
+    }
+
+    if (!hookLibPath) {
+      console.warn('⚠️  Hook library not found. Dynamic analysis will run without injection.');
+    }
+
+    const spawnEnv: Record<string, string | undefined> = {
+      ...process.env,
+      HOOK_NDJSON: logFile,
+      HOOK_VERBOSE: '0',
+    };
+
+    if (hookLibPath) {
+      if (process.platform === 'darwin') {
+        spawnEnv.DYLD_INSERT_LIBRARIES = hookLibPath;
+      } else if (process.platform === 'linux') {
+        spawnEnv.LD_PRELOAD = hookLibPath;
+      } else if (process.platform === 'win32') {
+        spawnEnv.HOOK_LIBRARY = hookLibPath;
+
+        // Windows: Add DLL search paths to PATH environment variable
+        const openSslPath = 'C:\\Program Files\\OpenSSL-Win64\\bin';
+        const targetDir = path.dirname(targetPath);
+        const currentPath = process.env.PATH || '';
+        // Add both binaryDir (for hook DLLs) and targetDir (for test exe DLLs)
+        spawnEnv.PATH = `${binaryDir};${targetDir};${openSslPath};${currentPath}`;
+      }
+    }
+
+    dynamicAnalysisProcess = spawn(dynamicAnalysisPath, [targetPath], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: binaryDir,
+      env: spawnEnv
+    });
+
+    let output = '';
+    let errorOutput = '';
+    let actualLogFile = logFile; // dynamic_analysis_cli가 생성한 실제 로그 파일 경로
+
+    dynamicAnalysisProcess.stdout?.on('data', (data) => {
+      output += data.toString();
+      console.log('[Dynamic Analysis]', data.toString());
+
+      // stdout에서 실제 로그 파일 경로 추출
+      const logMatch = data.toString().match(/\[dynamic_analysis\] log:\s+"([^"]+)"/);
+      if (logMatch) {
+        actualLogFile = logMatch[1];
+        console.log('Detected actual log file:', actualLogFile);
+      }
+    });
+
+    dynamicAnalysisProcess.stderr?.on('data', (data) => {
+      errorOutput += data.toString();
+      console.error('[Dynamic Analysis Error]', data.toString());
+    });
+
+    dynamicAnalysisProcess.on('close', (code) => {
+      console.log(`Dynamic analysis process closed with code: ${code}`);
+      console.log('Looking for log file at:', actualLogFile);
+
+      // NDJSON 로그 파일 파싱
+      const detections: any[] = [];
+      if (fs.existsSync(actualLogFile)) {
+        try {
+          const logContent = fs.readFileSync(actualLogFile, 'utf-8');
+          const lines = logContent.split('\n').filter((line: string) => line.trim());
+
+          const detectionMap = new Map<string, any>();
+
+          for (const line of lines) {
+            try {
+              const event = JSON.parse(line);
+              if (!event || !event.cipher) {
+                continue;
+              }
+
+              const apiName = typeof event.api === 'string' ? event.api : '';
+              const surfaceName = typeof event.surface === 'string' ? event.surface : 'dynamic';
+              const direction = typeof event.dir === 'string' ? event.dir : '';
+              const evidenceLabel = direction ? `${surfaceName} (${direction})` : surfaceName;
+              const mapKey = [
+                surfaceName || 'dynamic',
+                apiName || 'unknown',
+                direction || 'any',
+                event.cipher || 'Unknown'
+              ].join('|');
+
+              const existing = detectionMap.get(mapKey) ?? {
+                filePath: targetPath,
+                offset: 0,
+                algorithm: event.cipher || 'Unknown',
+                matchString: apiName || event.cipher || 'dynamic',
+                evidenceType: evidenceLabel,
+                severity: 'High',
+                detectionMethod: 'dynamic' as const,
+                dynamicMatchString: apiName || '',
+                dynamicEvidenceType: evidenceLabel,
+                dynamicApi: apiName || undefined
+              };
+
+              if (apiName) {
+                existing.matchString = existing.matchString || apiName;
+                existing.dynamicMatchString = apiName;
+                existing.dynamicApi = apiName;
+              }
+              if (evidenceLabel) {
+                existing.evidenceType = evidenceLabel;
+                existing.dynamicEvidenceType = evidenceLabel;
+              }
+              if (event.key && !existing.dynamicKey) {
+                existing.dynamicKey = event.key;
+              }
+              if (event.iv && !existing.dynamicIv) {
+                existing.dynamicIv = event.iv;
+              }
+              if (event.tag && !existing.dynamicTag) {
+                existing.dynamicTag = event.tag;
+              }
+
+              detectionMap.set(mapKey, existing);
+            } catch (parseError) {
+              console.error('Failed to parse NDJSON line:', parseError);
+            }
+          }
+
+          detections.push(
+            ...Array.from(detectionMap.values()).map((entry) => {
+              if (!entry.matchString) {
+                entry.matchString = entry.dynamicMatchString || entry.dynamicApi || entry.algorithm || 'dynamic';
+              }
+              return entry;
+            })
+          );
+        } catch (readError) {
+          console.error('Failed to read log file:', readError);
+        }
+      }
+
+      resolve(detections);
+      dynamicAnalysisProcess = null;
+    });
+
+    dynamicAnalysisProcess.on('error', (error) => {
+      console.error('Dynamic analysis process error:', error);
+      resolve([]);
+      dynamicAnalysisProcess = null;
+    });
+  });
+}
+
 ipcMain.handle('start-scan', async (event, scanOptions) => {
   console.log('=== start-scan IPC called ===');
   return new Promise((resolve, reject) => {
     // Simplified binary path handling for Windows
-    const binaryName = process.platform === 'win32' ? 'CryptoScanner.exe' : 'CryptoScannerCLI';
+    const binaryName = process.platform === 'win32' ? 'CryptoScannerCLI.exe' : 'CryptoScannerCLI';
 
     console.log('Looking for CryptoScanner binary...');
     console.log('__dirname:', __dirname);
@@ -188,6 +465,73 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
       console.log('Binary exists:', fs.existsSync(scannerPath));
       console.log('process.resourcesPath:', process.resourcesPath);
       console.log('__dirname:', __dirname);
+
+      const executableCandidates = new Set<string>();
+
+      const isExecutableFile = (filePath: string): boolean => {
+        if (!filePath) {
+          return false;
+        }
+        try {
+          const stats = fs.statSync(filePath);
+          if (!stats.isFile()) {
+            return false;
+          }
+
+          const ext = path.extname(filePath).toLowerCase();
+          const hasExecBit = (stats.mode & 0o111) !== 0;
+
+          // file 명령어로 실제 실행 파일 타입 확인
+          try {
+            const { execSync } = require('child_process');
+            const fileOutput = execSync(`file "${filePath}"`, { encoding: 'utf-8', timeout: 5000 });
+
+            if (process.platform === 'darwin') {
+              // macOS: Mach-O 파일만 실행 가능
+              return fileOutput.includes('Mach-O');
+            } else if (process.platform === 'linux') {
+              // Linux: ELF 파일만 실행 가능
+              return fileOutput.includes('ELF');
+            } else if (process.platform === 'win32') {
+              // Windows: PE 파일만 실행 가능
+              return fileOutput.includes('PE32') || fileOutput.includes('MS-DOS');
+            }
+          } catch (fileErr) {
+            // file 명령어 실패 시 확장자와 권한으로 폴백
+            if (process.platform === 'linux') {
+              console.log(`[Linux] file command failed for ${filePath}, using fallback. hasExecBit=${hasExecBit}, ext=${ext}`);
+            }
+            if (process.platform === 'win32') {
+              return ['.exe', '.com', '.dll'].includes(ext);
+            } else if (process.platform === 'darwin') {
+              return ['.dylib', '.so'].includes(ext) || hasExecBit;
+            } else if (process.platform === 'linux') {
+              return ['.so'].includes(ext) || hasExecBit;
+            }
+          }
+
+          return false;
+        } catch (err) {
+          console.log(`Executable check skipped for ${filePath}:`, err);
+        }
+        return false;
+      };
+
+      const trackExecutableCandidate = (filePath: string) => {
+        if (!filePath) {
+          return;
+        }
+        const isExec = isExecutableFile(filePath);
+        if (process.platform === 'linux') {
+          console.log(`[Linux] trackExecutableCandidate: ${filePath} -> ${isExec}`);
+        }
+        if (isExec) {
+          executableCandidates.add(filePath);
+        }
+      };
+
+      // Prefetch explicit target if it is executable
+      trackExecutableCandidate(scanOptions.path);
 
       // Set working directory to the original CryptoScanner source folder
       // This ensures result folder is created in the expected location
@@ -299,6 +643,14 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
       console.log('Spawn environment PATH:', spawnEnv.PATH);
 
+      let lastProgressSnapshot = {
+        currentFile: 'Scanning...',
+        filesDone: 0,
+        filesTotal: 0,
+        percentage: 0,
+        detectionCount: 0
+      };
+
       scannerProcess = spawn(scannerPath, [scanOptions.path], {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: effectiveCwd,
@@ -338,6 +690,8 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                   scannedFiles = parseInt(parts[parts.length - 2]) || 0;
                   totalFiles = parseInt(parts[parts.length - 1]) || 1;
                 }
+
+                trackExecutableCandidate(currentFile);
               } else if (parts[1] === 'START') {
                 currentFile = parts[2];
 
@@ -345,6 +699,8 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                 if (process.platform === 'win32' && parts.length > 3) {
                   currentFile = parts.slice(2).join(':');
                 }
+
+                trackExecutableCandidate(currentFile);
               } else if (parts[1] === 'COMPLETE') {
                 scannedFiles = totalFiles;
               }
@@ -360,6 +716,13 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
               };
               console.log('Main process sending progress:', progressData);
               mainWindow.webContents.send('scan-progress', progressData);
+              lastProgressSnapshot = {
+                currentFile: progressData.currentFile,
+                filesDone: progressData.filesDone,
+                filesTotal: progressData.filesTotal,
+                percentage: progressData.percentage,
+                detectionCount: progressData.detectionCount
+              };
             } else if (line.startsWith('DETECTION:')) {
               // Parse detection: DETECTION:filePath,offset,algorithm,matchString,evidenceType,severity
               const detectionData = line.substring(10); // Remove 'DETECTION:' prefix
@@ -376,6 +739,7 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                 };
                 detections.push(detection);
                 console.log('Added detection:', detection);
+                trackExecutableCandidate(detection.filePath);
 
                 // Send updated detection count
                 const progressData = {
@@ -388,6 +752,13 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                 };
                 console.log('Main process sending detection update:', progressData);
                 mainWindow.webContents.send('scan-progress', progressData);
+                lastProgressSnapshot = {
+                  currentFile: progressData.currentFile,
+                  filesDone: progressData.filesDone,
+                  filesTotal: progressData.filesTotal,
+                  percentage: progressData.percentage,
+                  detectionCount: progressData.detectionCount
+                };
               }
             } else if (line.startsWith('SUMMARY:')) {
               // Handle summary information
@@ -406,6 +777,7 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                 };
                 detections.push(detection);
                 console.log('Added legacy detection:', detection);
+                trackExecutableCandidate(detection.filePath);
               }
             }
           }
@@ -417,11 +789,37 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
         console.error('Scanner stderr:', data.toString());
       });
 
-      scannerProcess.on('close', (code) => {
+      scannerProcess.on('close', async (code) => {
         console.log(`Scanner process closed with code: ${code}`);
         console.log(`Output length: ${output.length}`);
         console.log(`Detections found: ${detections.length}`);
         console.log('Detections:', detections);
+
+        // 정적 탐지 결과에 detectionMethod 태그 추가
+        detections.forEach((d: any) => {
+          if (!d.detectionMethod) {
+            d.detectionMethod = 'static';
+          }
+        });
+
+        const emitProgress = (message: string, detectionCount: number) => {
+          if (!mainWindow || mainWindow.isDestroyed()) {
+            return;
+          }
+          mainWindow.webContents.send('scan-progress', {
+            type: 'progress',
+            currentFile: message,
+            filesDone: lastProgressSnapshot.filesDone,
+            filesTotal: lastProgressSnapshot.filesTotal,
+            percentage: lastProgressSnapshot.percentage,
+            detectionCount
+          });
+          lastProgressSnapshot = {
+            ...lastProgressSnapshot,
+            currentFile: message,
+            detectionCount
+          };
+        };
 
         // For packaged apps, move result files from package location to user-accessible location
         if (process.resourcesPath && code === 0) {
@@ -470,13 +868,134 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
           }
         }
 
+        // 실행 파일이 스캔 대상에 포함된 경우 동적 탐지 실행
+        let dynamicDetections: any[] = [];
+        if (code === 0) {
+          emitProgress('Running dynamic analysis...', detections.length);
+          try {
+            const fs = require('fs');
+            const targetPath = scanOptions.path;
+            const stat = fs.statSync(targetPath);
+
+            // 단일 실행 파일인 경우 동적 탐지 실행
+            if (stat.isFile()) {
+              if (isExecutableFile(targetPath)) {
+                console.log('Running dynamic analysis for executable file...');
+                dynamicDetections = await runDynamicAnalysis(targetPath, cryptoScannerDir);
+                console.log(`Dynamic analysis found ${dynamicDetections.length} detections`);
+              } else {
+                console.log('Target file is not executable on this platform. Skipping dynamic analysis.');
+              }
+            }
+            // 폴더 스캔인 경우: 정적 탐지에서 발견된 실행 파일들에 대해 동적 탐지 수행
+            else if (stat.isDirectory()) {
+              console.log('Folder scan detected. Analyzing executable files for dynamic analysis...');
+              if (process.platform === 'linux') {
+                console.log(`[Linux] Number of detections: ${detections.length}`);
+                console.log(`[Linux] Executable candidates before tracking detections: ${executableCandidates.size}`);
+              }
+
+              // Ensure detection file paths are tracked as candidates
+              for (const detection of detections) {
+                trackExecutableCandidate(detection.filePath);
+              }
+
+              // 정적 탐지 결과에서 실행 파일들 추출
+              const executableFiles = new Set<string>(executableCandidates);
+
+              console.log(`Found ${executableFiles.size} executable files to analyze dynamically`);
+              if (process.platform === 'linux') {
+                console.log(`[Linux] Executable files list:`, Array.from(executableFiles));
+              }
+
+              // 각 실행 파일에 대해 동적 탐지 수행
+              for (const execPath of executableFiles) {
+                if (!isExecutableFile(execPath)) {
+                  console.log(`Skipping ${execPath}: not executable on this platform`);
+                  continue;
+                }
+
+                console.log(`Running dynamic analysis on: ${execPath}`);
+                try {
+                  const results = await runDynamicAnalysis(execPath, cryptoScannerDir);
+                  dynamicDetections.push(...results);
+                  console.log(`  → Found ${results.length} detections`);
+                } catch (err) {
+                  console.error(`Failed to analyze ${execPath}:`, err);
+                }
+              }
+
+              console.log(`Total dynamic detections: ${dynamicDetections.length}`);
+            }
+          } catch (error) {
+            console.error('Failed to run dynamic analysis:', error);
+          }
+        }
+
+        const detectionKey = (d: any) => `${d.filePath || ''}:${d.algorithm || 'Unknown'}`;
+        const mergedDetections = detections.map((det: any) => ({ ...det }));
+        const detectionMap = new Map<string, any>();
+
+        for (const det of mergedDetections) {
+          detectionMap.set(detectionKey(det), det);
+        }
+
+        let mergedDynamicCount = 0;
+        const dynamicOnlyDetections: any[] = [];
+
+        for (const dynamicDetection of dynamicDetections) {
+          if (!dynamicDetection) {
+            continue;
+          }
+          const key = detectionKey(dynamicDetection);
+          const existing = detectionMap.get(key);
+
+          if (existing) {
+            mergedDynamicCount += 1;
+            existing.detectionMethod = existing.detectionMethod === 'dynamic' ? 'dynamic' : 'static+dynamic';
+            if (dynamicDetection.dynamicMatchString) {
+              existing.dynamicMatchString = dynamicDetection.dynamicMatchString;
+            }
+            if (dynamicDetection.dynamicEvidenceType) {
+              existing.dynamicEvidenceType = dynamicDetection.dynamicEvidenceType;
+            }
+            if (dynamicDetection.dynamicApi) {
+              existing.dynamicApi = dynamicDetection.dynamicApi;
+            }
+            if (dynamicDetection.dynamicKey) {
+              existing.dynamicKey = dynamicDetection.dynamicKey;
+            }
+            if (dynamicDetection.dynamicIv) {
+              existing.dynamicIv = dynamicDetection.dynamicIv;
+            }
+            if (dynamicDetection.dynamicTag) {
+              existing.dynamicTag = dynamicDetection.dynamicTag;
+            }
+          } else {
+            const dynamicClone = {
+              ...dynamicDetection,
+              detectionMethod: dynamicDetection.detectionMethod || 'dynamic'
+            };
+            mergedDetections.push(dynamicClone);
+            detectionMap.set(key, dynamicClone);
+            dynamicOnlyDetections.push(dynamicClone);
+          }
+        }
+
+        emitProgress('Finalizing scan results...', mergedDetections.length);
+
+        console.log(`Total detections after merge: ${mergedDetections.length}`);
+        console.log(`  - Static: ${detections.length}`);
+        console.log(`  - Dynamic merged into static: ${mergedDynamicCount}`);
+        console.log(`  - Dynamic only: ${dynamicOnlyDetections.length}`);
+
         if (code === 0) {
           resolve({
             success: true,
             output,
-            detections,
-            nonPqcCount: detections.length,
-            fileCount: new Set(detections.map(d => d.filePath)).size
+            detections: mergedDetections,
+            nonPqcCount: mergedDetections.length,
+            fileCount: new Set(mergedDetections.map(d => d.filePath)).size
           });
         } else {
           reject(new Error(errorOutput || 'Scan failed with code ' + code));
@@ -504,9 +1023,12 @@ ipcMain.handle('cancel-scan', async () => {
   if (scannerProcess) {
     scannerProcess.kill();
     scannerProcess = null;
-    return { success: true };
   }
-  return { success: false };
+  if (dynamicAnalysisProcess) {
+    dynamicAnalysisProcess.kill();
+    dynamicAnalysisProcess = null;
+  }
+  return { success: true };
 });
 
 ipcMain.handle('save-csv', async (event, data) => {

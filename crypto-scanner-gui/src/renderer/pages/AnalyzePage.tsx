@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PageType, ScanResult, TabType } from '../types';
+import { PageType, ScanResult, TabType, Detection } from '../types';
 
 interface AnalyzePageProps {
   result: ScanResult;
@@ -18,7 +18,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
         fileCount: 0,
         riskLevel: 'LOW',
         algorithmCounts: {},
-        severityCounts: { low: 0, med: 0, high: 0 }
+        severityCounts: { low: 0, med: 0, high: 0 },
+        methodCounts: { static: 0, dynamic: 0 },
+        detections: []
       };
     }
 
@@ -45,6 +47,16 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
       else if (severity === 'high') severityCounts.high++;
     });
 
+    const methodCounts = detections.reduce((acc, detection) => {
+      const method = detection.detectionMethod;
+      if (method === 'dynamic' || method === 'static+dynamic') {
+        acc.dynamic += 1;
+      } else {
+        acc.static += 1;
+      }
+      return acc;
+    }, { static: 0, dynamic: 0 });
+
     // Determine overall risk level
     const totalSeverity = severityCounts.low + severityCounts.med + severityCounts.high;
     let riskLevel = 'LOW';
@@ -57,6 +69,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
       riskLevel,
       algorithmCounts,
       severityCounts,
+      methodCounts,
       detections
     };
   };
@@ -74,7 +87,14 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
       detection.matchString.toLowerCase().includes(query) ||
       detection.evidenceType.toLowerCase().includes(query) ||
       detection.severity.toLowerCase().includes(query) ||
-      detection.offset.toString().includes(query)
+      detection.offset.toString().includes(query) ||
+      (detection.detectionMethod || 'static').toLowerCase().includes(query) ||
+      detection.dynamicMatchString?.toLowerCase().includes(query) ||
+      detection.dynamicEvidenceType?.toLowerCase().includes(query) ||
+      detection.dynamicKey?.toLowerCase().includes(query) ||
+      detection.dynamicIv?.toLowerCase().includes(query) ||
+      detection.dynamicTag?.toLowerCase().includes(query) ||
+      detection.dynamicApi?.toLowerCase().includes(query)
     );
   });
 
@@ -98,28 +118,64 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
     });
   };
 
+  const sanitizeCsvCell = (value: string): string =>
+    value.replace(/"/g, '""');
+
+  const buildCsvRows = (detections: Detection[]): string[][] => {
+    return detections.flatMap(detection => {
+      const baseRow = [
+        detection.filePath || '',
+        detection.algorithm || '',
+        detection.evidenceType || '',
+        detection.severity || '',
+        detection.matchString || '',
+        (detection.offset ?? 0).toString(),
+        detection.detectionMethod || 'static'
+      ];
+
+      const rows: string[][] = [baseRow];
+
+      if (detection.detectionMethod === 'dynamic' || detection.detectionMethod === 'static+dynamic') {
+        const appendDynamicRow = (label: string, value?: string) => {
+          if (!value) return;
+
+          rows.push([
+            detection.filePath || '',
+            detection.algorithm || '',
+            'dynamic',
+            detection.severity || '',
+            `${label}: ${value}`,
+            (detection.offset ?? 0).toString(),
+            'dynamic'
+          ]);
+        };
+
+        appendDynamicRow('Dynamic API', detection.dynamicMatchString || detection.dynamicApi || detection.matchString);
+        appendDynamicRow('Dynamic Key', detection.dynamicKey);
+        appendDynamicRow('Dynamic IV', detection.dynamicIv);
+        appendDynamicRow('Dynamic Tag', detection.dynamicTag);
+      }
+
+      return rows;
+    });
+  };
+
+  const buildCsvContent = (detections: Detection[]): string => {
+    const headers = ['File Path', 'Algorithm', 'Evidence Type', 'Severity', 'Match String', 'Offset', 'Detection Method'];
+    const rows = buildCsvRows(detections);
+
+    return [
+      headers,
+      ...rows
+    ].map(row => row.map(cell => `"${sanitizeCsvCell(cell)}"`).join(',')).join('\n');
+  };
+
   // CSV download function
   const downloadCSV = () => {
     console.log('Downloading CSV with detections:', resultData.detections);
     console.log('Sample detection:', resultData.detections[0]);
 
-    const headers = ['File Path', 'Algorithm', 'Evidence Type', 'Severity', 'Match String', 'Offset'];
-    const csvContent = [
-      headers.join(','),
-      ...resultData.detections.map(detection => {
-        const row = [
-          `"${detection.filePath}"`,
-          `"${detection.algorithm}"`,
-          `"${detection.evidenceType}"`,
-          `"${detection.severity}"`,
-          `"${detection.matchString}"`,
-          detection.offset?.toString() || '0'
-        ];
-        console.log('CSV row:', row);
-        return row.join(',');
-      })
-    ].join('\n');
-
+    const csvContent = buildCsvContent(resultData.detections);
     console.log('Final CSV content:', csvContent);
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -204,19 +260,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
   };
 
   const generateCsvData = (result: ScanResult): string => {
-    const headers = ['File Path', 'Algorithm', 'Evidence Type', 'Severity', 'Match String', 'Offset'];
-    const rows = result.detections.map(detection => [
-      detection.filePath,
-      detection.algorithm,
-      detection.evidenceType,
-      detection.severity,
-      detection.matchString.replace(/"/g, '""'),
-      detection.offset.toString()
-    ]);
-
-    return [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n');
+    return buildCsvContent(result.detections);
   };
 
   const CircleChart = () => {
@@ -518,18 +562,28 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             {/* Results counter */}
             <div style={{
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
+              flexDirection: 'column',
+              gap: '4px',
               color: 'rgba(255, 255, 255, 0.7)',
               fontSize: '13px',
               fontFamily: 'SF Pro'
             }}>
-              <span>
-                Showing {filteredDetections.length} of {resultData.detections.length} detections
-                {searchQuery && ` for "${searchQuery}"`}
-              </span>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>
+                  Showing {filteredDetections.length} of {resultData.detections.length} detections
+                  {searchQuery && ` for "${searchQuery}"`}
+                </span>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <span>Static: {resultData.methodCounts.static}</span>
+                  <span>Dynamic: {resultData.methodCounts.dynamic}</span>
+                </div>
+              </div>
               {searchQuery && filteredDetections.length === 0 && (
-                <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                <span style={{ color: 'rgba(255, 255, 255, 0.5)', alignSelf: 'flex-end' }}>
                   No matches found
                 </span>
               )}
@@ -545,23 +599,60 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             }}>
               {filteredDetections.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {filteredDetections.map((detection, index) => (
-                    <div key={index} style={{
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontFamily: 'SF Pro',
-                      color: '#FFFFFF'
-                    }}>
-                      <div><strong>File:</strong> {highlightText(detection.filePath, searchQuery)}</div>
-                      <div><strong>Algorithm:</strong> {highlightText(detection.algorithm, searchQuery)}</div>
-                      <div><strong>Match:</strong> {highlightText(detection.matchString, searchQuery)}</div>
-                      <div><strong>Offset:</strong> {highlightText(detection.offset.toString(), searchQuery)}</div>
-                      <div><strong>Type:</strong> {highlightText(detection.evidenceType, searchQuery)}</div>
-                      <div><strong>Severity:</strong> {highlightText(detection.severity, searchQuery)}</div>
-                    </div>
-                  ))}
+                  {filteredDetections.map((detection, index) => {
+                    const method = (detection.detectionMethod === 'dynamic' || detection.detectionMethod === 'static+dynamic')
+                      ? 'dynamic'
+                      : 'static';
+                    const methodLabel = method === 'dynamic' ? 'Dynamic' : 'Static';
+                    const methodColor = method === 'dynamic' ? '#FF9500' : '#34C759';
+                    const borderColor = method === 'dynamic'
+                      ? 'rgba(255, 149, 0, 0.6)'
+                      : 'rgba(255, 255, 255, 0.12)';
+
+                    const matchLabel = method === 'dynamic' ? 'API' : 'Match';
+                    const matchValue = method === 'dynamic'
+                      ? (detection.dynamicMatchString || detection.dynamicApi || detection.matchString || 'N/A')
+                      : (detection.matchString || '');
+
+                    const typeLabel = method === 'dynamic' ? 'Surface' : 'Type';
+                    const typeValue = method === 'dynamic'
+                      ? (detection.dynamicEvidenceType || detection.evidenceType || 'dynamic')
+                      : (detection.evidenceType || '');
+
+                    return (
+                      <div key={index} style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        fontSize: '12px',
+                        fontFamily: 'SF Pro',
+                        color: '#FFFFFF',
+                        border: `1px solid ${borderColor}`
+                      }}>
+                        <div><strong>File:</strong> {highlightText(detection.filePath, searchQuery)}</div>
+                        <div><strong>Algorithm:</strong> {highlightText(detection.algorithm, searchQuery)}</div>
+                        <div><strong>{matchLabel}:</strong> {highlightText(matchValue, searchQuery)}</div>
+                        <div><strong>Offset:</strong> {highlightText(detection.offset.toString(), searchQuery)}</div>
+                        <div><strong>{typeLabel}:</strong> {highlightText(typeValue, searchQuery)}</div>
+                        <div><strong>Severity:</strong> {highlightText(detection.severity, searchQuery)}</div>
+                        <div>
+                          <strong>Method:</strong>{' '}
+                          <span style={{ color: methodColor, fontWeight: 600 }}>
+                            {highlightText(methodLabel, searchQuery)}
+                          </span>
+                        </div>
+                        {method === 'dynamic' && detection.dynamicKey && (
+                          <div><strong>Dynamic Key:</strong> {highlightText(detection.dynamicKey, searchQuery)}</div>
+                        )}
+                        {method === 'dynamic' && detection.dynamicIv && (
+                          <div><strong>Dynamic IV:</strong> {highlightText(detection.dynamicIv, searchQuery)}</div>
+                        )}
+                        {method === 'dynamic' && detection.dynamicTag && (
+                          <div><strong>Dynamic Tag:</strong> {highlightText(detection.dynamicTag, searchQuery)}</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : resultData.detections.length === 0 ? (
                 <div style={{
