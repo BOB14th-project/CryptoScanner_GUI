@@ -18,6 +18,13 @@ export interface Detection {
   evidenceType: string;
   severity: string;
   fileSize?: number;
+  detectionMethod?: 'static' | 'dynamic' | 'static+dynamic';
+  dynamicMatchString?: string;
+  dynamicEvidenceType?: string;
+  dynamicKey?: string;
+  dynamicIv?: string;
+  dynamicTag?: string;
+  dynamicApi?: string;
 }
 
 export interface ScanProgress {
