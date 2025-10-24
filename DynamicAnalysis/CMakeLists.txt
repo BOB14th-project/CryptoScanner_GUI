@@ -70,7 +70,16 @@ if(WIN32)
     set(HOOK_SRCS
         src/platform/windows/core/windows_hook_dll.cpp
         src/platform/windows/hooks/windows_hook_openssl_detours.cpp
+        src/platform/windows/hooks/windows_hook_openssl_provider.cpp
+        src/platform/windows/hooks/windows_hook_openssl_ecc.cpp
         src/platform/windows/hooks/windows_hook_openssl_state.cpp
+        src/platform/windows/hooks/windows_hook_pycryptodome.cpp
+        src/platform/windows/hooks/windows_hook_libsodium.cpp
+        src/platform/windows/hooks/windows_hook_mbedtls.cpp
+        src/platform/windows/hooks/windows_hook_wolfssl.cpp
+        src/platform/windows/hooks/windows_hook_gnutls.cpp
+        src/platform/windows/hooks/windows_hook_nss.cpp
+        src/platform/windows/hooks/windows_hook_boringssl.cpp
         src/platform/windows/utils/windows_output.cpp
         src/platform/windows/utils/windows_crypto_utils.cpp
     )
@@ -161,11 +170,19 @@ target_precompile_headers(hook PRIVATE ${CMAKE_SOURCE_DIR}/include/common/pch.h)
 # Platform-specific compilation and linking
 if(WIN32)
     # Windows-specific compile options
-    target_compile_options(hook PRIVATE /O2 /W3 /EHsc)
+    # Use static runtime linkage to avoid MSVC runtime DLL dependencies
+    target_compile_options(hook PRIVATE /O2 /W3 /EHsc /MT)
     target_compile_definitions(hook PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 
-    # Windows-specific libraries
-    target_link_libraries(hook PRIVATE OpenSSL::Crypto)
+    # Windows: Only include OpenSSL headers, do NOT link - we resolve functions at runtime
+    if(TARGET OpenSSL::Crypto)
+        get_target_property(OPENSSL_INCLUDE_DIRS OpenSSL::Crypto INTERFACE_INCLUDE_DIRECTORIES)
+        if(OPENSSL_INCLUDE_DIRS)
+            target_include_directories(hook PRIVATE ${OPENSSL_INCLUDE_DIRS})
+        endif()
+    elseif(OPENSSL_INCLUDE_DIR)
+        target_include_directories(hook PRIVATE ${OPENSSL_INCLUDE_DIR})
+    endif()
 
     if(detours_FOUND)
         if(DETOURS_INCLUDE_DIR)
@@ -179,6 +196,11 @@ if(WIN32)
     else()
         message(FATAL_ERROR "Detours library is required for Windows builds but was not found")
     endif()
+
+    # Use delay-load for OpenSSL DLL to avoid load-time dependency
+    target_link_options(hook PRIVATE "/DELAYLOAD:libcrypto-3-x64.dll")
+    target_link_options(hook PRIVATE "/DELAYLOAD:libcrypto.dll")
+    target_link_libraries(hook PRIVATE delayimp.lib)
 elseif(APPLE)
     # macOS-specific compile options
     target_compile_options(hook PRIVATE -O2 -fPIC -fno-omit-frame-pointer -Wall -Wextra)
@@ -257,6 +279,9 @@ if(ENABLE_GNUTLS)
         elseif(UNIX)
             include_directories(${GNUTLS_INCLUDE_DIR})
             target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_gnutls.cpp)
+        elseif(WIN32)
+            target_include_directories(hook PRIVATE ${GNUTLS_INCLUDE_DIR})
+            # Windows GnuTLS hook already included in HOOK_SRCS
         endif()
 
         add_executable(gnutls_aes_gcm_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c)
@@ -325,6 +350,9 @@ if(ENABLE_NSS)
         elseif(UNIX)
             include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
             target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_nss.cpp)
+        elseif(WIN32)
+            target_include_directories(hook PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
+            # Windows NSS hook already included in HOOK_SRCS
         endif()
 
         add_executable(nss_aes_gcm_demo tests/NSS/symmetric/nss_aes_gcm_demo.c)
@@ -356,6 +384,9 @@ if(ENABLE_MBEDTLS)
         elseif(UNIX)
             include_directories(${MBEDTLS_INCLUDE_DIR})
             target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_mbedtls.cpp)
+        elseif(WIN32)
+            target_include_directories(hook PRIVATE ${MBEDTLS_INCLUDE_DIR})
+            # Windows mbedTLS hook already included in HOOK_SRCS
         endif()
 
         add_executable(mbedtls_aes_gcm_demo tests/mbedTLS/symmetric/mbedtls_aes_gcm_demo.c)
@@ -397,6 +428,9 @@ if(ENABLE_WOLFSSL)
         elseif(UNIX)
             target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_wolfssl.cpp)
             target_include_directories(hook PRIVATE ${WOLFSSL_INCLUDE_DIR})
+        elseif(WIN32)
+            target_include_directories(hook PRIVATE ${WOLFSSL_INCLUDE_DIR})
+            # Windows wolfSSL hook already included in HOOK_SRCS
         endif()
 
         add_executable(wolfssl_aes_gcm_demo tests/wolfSSL/symmetric/wolfssl_aes_gcm_demo.c)
@@ -449,6 +483,9 @@ if(BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
         set_source_files_properties(src/platform/linux/hooks/linux_hook_boringssl.cpp
             PROPERTIES
                 COMPILE_FLAGS "-I${BORINGSSL_INCLUDE_DIR}")
+    elseif(WIN32)
+        target_include_directories(hook PRIVATE ${BORINGSSL_INCLUDE_DIR})
+        # Windows BoringSSL hook already included in HOOK_SRCS
     endif()
 
     add_executable(boringssl_aes_gcm_demo tests/boringSSL/symmetric/boringssl_aes_gcm_demo.cc)

@@ -241,6 +241,13 @@ async function runDynamicAnalysis(targetPath: string, scannerDir: string): Promi
         spawnEnv.LD_PRELOAD = hookLibPath;
       } else if (process.platform === 'win32') {
         spawnEnv.HOOK_LIBRARY = hookLibPath;
+
+        // Windows: Add DLL search paths to PATH environment variable
+        const openSslPath = 'C:\\Program Files\\OpenSSL-Win64\\bin';
+        const targetDir = path.dirname(targetPath);
+        const currentPath = process.env.PATH || '';
+        // Add both binaryDir (for hook DLLs) and targetDir (for test exe DLLs)
+        spawnEnv.PATH = `${binaryDir};${targetDir};${openSslPath};${currentPath}`;
       }
     }
 
@@ -282,31 +289,72 @@ async function runDynamicAnalysis(targetPath: string, scannerDir: string): Promi
           const logContent = fs.readFileSync(actualLogFile, 'utf-8');
           const lines = logContent.split('\n').filter((line: string) => line.trim());
 
+          const detectionMap = new Map<string, any>();
+
           for (const line of lines) {
             try {
               const event = JSON.parse(line);
-              // NDJSON 이벤트를 Detection 형식으로 변환
-              if (event.cipher && event.key) {
-                detections.push({
-                  filePath: targetPath,
-                  offset: 0,
-                  algorithm: event.cipher || 'Unknown',
-                  matchString: event.api || '',
-                  evidenceType: event.surface || 'dynamic',
-                  severity: 'High',
-                  detectionMethod: 'dynamic',
-                  dynamicMatchString: event.api || '',
-                  dynamicEvidenceType: event.surface || 'dynamic',
-                  dynamicKey: event.key || undefined,
-                  dynamicIv: event.iv || undefined,
-                  dynamicTag: event.tag || undefined,
-                  dynamicApi: event.api || undefined
-                });
+              if (!event || !event.cipher) {
+                continue;
               }
+
+              const apiName = typeof event.api === 'string' ? event.api : '';
+              const surfaceName = typeof event.surface === 'string' ? event.surface : 'dynamic';
+              const direction = typeof event.dir === 'string' ? event.dir : '';
+              const evidenceLabel = direction ? `${surfaceName} (${direction})` : surfaceName;
+              const mapKey = [
+                surfaceName || 'dynamic',
+                apiName || 'unknown',
+                direction || 'any',
+                event.cipher || 'Unknown'
+              ].join('|');
+
+              const existing = detectionMap.get(mapKey) ?? {
+                filePath: targetPath,
+                offset: 0,
+                algorithm: event.cipher || 'Unknown',
+                matchString: apiName || event.cipher || 'dynamic',
+                evidenceType: evidenceLabel,
+                severity: 'High',
+                detectionMethod: 'dynamic' as const,
+                dynamicMatchString: apiName || '',
+                dynamicEvidenceType: evidenceLabel,
+                dynamicApi: apiName || undefined
+              };
+
+              if (apiName) {
+                existing.matchString = existing.matchString || apiName;
+                existing.dynamicMatchString = apiName;
+                existing.dynamicApi = apiName;
+              }
+              if (evidenceLabel) {
+                existing.evidenceType = evidenceLabel;
+                existing.dynamicEvidenceType = evidenceLabel;
+              }
+              if (event.key && !existing.dynamicKey) {
+                existing.dynamicKey = event.key;
+              }
+              if (event.iv && !existing.dynamicIv) {
+                existing.dynamicIv = event.iv;
+              }
+              if (event.tag && !existing.dynamicTag) {
+                existing.dynamicTag = event.tag;
+              }
+
+              detectionMap.set(mapKey, existing);
             } catch (parseError) {
               console.error('Failed to parse NDJSON line:', parseError);
             }
           }
+
+          detections.push(
+            ...Array.from(detectionMap.values()).map((entry) => {
+              if (!entry.matchString) {
+                entry.matchString = entry.dynamicMatchString || entry.dynamicApi || entry.algorithm || 'dynamic';
+              }
+              return entry;
+            })
+          );
         } catch (readError) {
           console.error('Failed to read log file:', readError);
         }
@@ -884,37 +932,70 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
           }
         }
 
-        const detectionKey = (d: any) => `${d.filePath}:${d.algorithm}`;
-        const staticKeys = new Set(detections.map((d: any) => detectionKey(d)));
-        const dynamicKeys = new Set<string>();
+        const detectionKey = (d: any) => `${d.filePath || ''}:${d.algorithm || 'Unknown'}`;
+        const mergedDetections = detections.map((det: any) => ({ ...det }));
+        const detectionMap = new Map<string, any>();
 
-        const dynamicUnique = dynamicDetections.filter((detection: any) => {
-          const key = detectionKey(detection);
-          if (staticKeys.has(key)) {
-            console.log(`Skipping dynamic duplicate for ${key}`);
-            return false;
+        for (const det of mergedDetections) {
+          detectionMap.set(detectionKey(det), det);
+        }
+
+        let mergedDynamicCount = 0;
+        const dynamicOnlyDetections: any[] = [];
+
+        for (const dynamicDetection of dynamicDetections) {
+          if (!dynamicDetection) {
+            continue;
           }
-          if (dynamicKeys.has(key)) {
-            console.log(`Skipping repeated dynamic detection for ${key}`);
-            return false;
+          const key = detectionKey(dynamicDetection);
+          const existing = detectionMap.get(key);
+
+          if (existing) {
+            mergedDynamicCount += 1;
+            existing.detectionMethod = existing.detectionMethod === 'dynamic' ? 'dynamic' : 'static+dynamic';
+            if (dynamicDetection.dynamicMatchString) {
+              existing.dynamicMatchString = dynamicDetection.dynamicMatchString;
+            }
+            if (dynamicDetection.dynamicEvidenceType) {
+              existing.dynamicEvidenceType = dynamicDetection.dynamicEvidenceType;
+            }
+            if (dynamicDetection.dynamicApi) {
+              existing.dynamicApi = dynamicDetection.dynamicApi;
+            }
+            if (dynamicDetection.dynamicKey) {
+              existing.dynamicKey = dynamicDetection.dynamicKey;
+            }
+            if (dynamicDetection.dynamicIv) {
+              existing.dynamicIv = dynamicDetection.dynamicIv;
+            }
+            if (dynamicDetection.dynamicTag) {
+              existing.dynamicTag = dynamicDetection.dynamicTag;
+            }
+          } else {
+            const dynamicClone = {
+              ...dynamicDetection,
+              detectionMethod: dynamicDetection.detectionMethod || 'dynamic'
+            };
+            mergedDetections.push(dynamicClone);
+            detectionMap.set(key, dynamicClone);
+            dynamicOnlyDetections.push(dynamicClone);
           }
-          dynamicKeys.add(key);
-          return true;
-        });
+        }
 
-        emitProgress('Finalizing scan results...', detections.length + dynamicUnique.length);
+        emitProgress('Finalizing scan results...', mergedDetections.length);
 
-        console.log(`Total detections after merge: ${detections.length + dynamicUnique.length}`);
+        console.log(`Total detections after merge: ${mergedDetections.length}`);
         console.log(`  - Static: ${detections.length}`);
-        console.log(`  - Dynamic (unique): ${dynamicUnique.length}`);
+        console.log(`  - Dynamic merged into static: ${mergedDynamicCount}`);
+        console.log(`  - Dynamic only: ${dynamicOnlyDetections.length}`);
 
         if (code === 0) {
           resolve({
             success: true,
             output,
-            detections: [...detections, ...dynamicUnique],
-            nonPqcCount: detections.length + dynamicUnique.length,
-            fileCount: new Set([...detections, ...dynamicUnique].map(d => d.filePath)).size
+            detections: mergedDetections,
+            nonPqcCount: mergedDetections.length,
+            fileCount: new Set(mergedDetections.map(d => d.filePath)).size
           });
         } else {
           reject(new Error(errorOutput || 'Scan failed with code ' + code));

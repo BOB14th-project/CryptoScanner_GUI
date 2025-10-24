@@ -507,23 +507,71 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
     std::string target_str = target.string();
     std::string hook_dll_str = hook_dll.string();
 
-    BOOL success = DetourCreateProcessWithDll(
-        target_str.c_str(),                // Application name
+    // Set working directory to target's directory so it can find DLLs
+    fs::path target_dir = target.parent_path();
+    std::string target_dir_str = target_dir.string();
+
+    // Verbose logging
+    if (std::getenv("HOOK_VERBOSE")) {
+        std::cout << "[dynamic_analysis] Target executable: " << target_str << '\n';
+        std::cout << "[dynamic_analysis] Hook DLL: " << hook_dll_str << '\n';
+        std::cout << "[dynamic_analysis] Working directory: " << target_dir_str << '\n';
+        std::cout << "[dynamic_analysis] Log file: " << log_path << '\n';
+
+        // Verify files exist
+        if (!fs::exists(target)) {
+            std::cerr << "[dynamic_analysis] ERROR: Target executable does not exist!\n";
+        }
+        if (!fs::exists(hook_dll)) {
+            std::cerr << "[dynamic_analysis] ERROR: Hook DLL does not exist!\n";
+        }
+    }
+
+    // Set working directory to target's directory so it can find DLLs
+    // Use nullptr for environment to inherit parent's environment
+    // The hook.dll and its dependencies must be accessible via system PATH or in target directory
+
+    BOOL success = DetourCreateProcessWithDllA(
+        nullptr,                           // Application name (nullptr = use command line)
         cmd_buffer.data(),                 // Command line
         nullptr,                           // Process security attributes
         nullptr,                           // Thread security attributes
         FALSE,                             // Inherit handles
         0,                                 // Creation flags
-        nullptr,                           // Environment
-        nullptr,                           // Current directory
+        nullptr,                           // Environment (inherit from parent)
+        nullptr,                           // Current directory (inherit from parent)
         &si,                               // Startup info
         &pi,                               // Process info
         hook_dll_str.c_str(),              // DLL to inject
         nullptr);                          // Additional DLLs
 
     if (!success) {
-        std::cerr << "[dynamic_analysis] DetourCreateProcessWithDll failed: " << GetLastError() << '\n';
+        DWORD error = GetLastError();
+        std::cerr << "[dynamic_analysis] DetourCreateProcessWithDll failed with error: " << error << '\n';
+
+        // Provide more detailed error messages
+        switch (error) {
+            case 2:
+                std::cerr << "[dynamic_analysis] ERROR_FILE_NOT_FOUND (2): Target executable or hook DLL not found\n";
+                break;
+            case 3:
+                std::cerr << "[dynamic_analysis] ERROR_PATH_NOT_FOUND (3): Path to target or hook DLL invalid\n";
+                break;
+            case 193:
+                std::cerr << "[dynamic_analysis] ERROR_BAD_EXE_FORMAT (193): Not a valid Win32 application\n";
+                break;
+            case 998:
+                std::cerr << "[dynamic_analysis] ERROR_NOACCESS (998): Invalid access to memory location\n";
+                break;
+            default:
+                std::cerr << "[dynamic_analysis] See https://docs.microsoft.com/en-us/windows/win32/debug/system-error-codes for error code details\n";
+                break;
+        }
         return 1;
+    }
+
+    if (std::getenv("HOOK_VERBOSE")) {
+        std::cout << "[dynamic_analysis] Process created successfully, PID: " << pi.dwProcessId << '\n';
     }
 
     // Wait for process completion

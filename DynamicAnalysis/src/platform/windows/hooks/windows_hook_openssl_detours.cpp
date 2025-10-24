@@ -12,28 +12,137 @@ typedef struct engine_st ENGINE;
 
 static constexpr const char* SURFACE = "openssl";
 
-// ---- OpenSSL cipher utilities ----
+// ---- Forward declarations of dynamic function pointers ----
+// These will be resolved at runtime via GetProcAddress
+static const char* (*Dyn_EVP_CIPHER_get0_name)(const EVP_CIPHER*) = nullptr;
+static const EVP_CIPHER* (*Dyn_EVP_CIPHER_CTX_get0_cipher)(const EVP_CIPHER_CTX*) = nullptr;
+static const EVP_CIPHER* (*Dyn_EVP_CIPHER_CTX_cipher)(const EVP_CIPHER_CTX*) = nullptr;
+static int (*Dyn_EVP_CIPHER_key_length)(const EVP_CIPHER*) = nullptr;
+static int (*Dyn_EVP_CIPHER_iv_length)(const EVP_CIPHER*) = nullptr;
+static int (*Dyn_EVP_CIPHER_nid)(const EVP_CIPHER*) = nullptr;
+static const char* (*Dyn_OBJ_nid2sn)(int) = nullptr;
+
+// ---- OpenSSL cipher utilities (using dynamic function pointers) ----
 static inline const char* cipher_name(const EVP_CIPHER* c) {
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-    return c ? EVP_CIPHER_get0_name(c) : nullptr;
-#else
-    return c ? OBJ_nid2sn(EVP_CIPHER_nid(c)) : nullptr;
-#endif
+    if (!c) return nullptr;
+
+    // Try OpenSSL 1.1+ API first
+    if (Dyn_EVP_CIPHER_get0_name) {
+        return Dyn_EVP_CIPHER_get0_name(c);
+    }
+
+    // Fallback to old API
+    if (Dyn_EVP_CIPHER_nid && Dyn_OBJ_nid2sn) {
+        return Dyn_OBJ_nid2sn(Dyn_EVP_CIPHER_nid(c));
+    }
+
+    return nullptr;
 }
 
 static inline const EVP_CIPHER* cipher_from_ctx(const EVP_CIPHER_CTX* ctx) {
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-    return ctx ? EVP_CIPHER_CTX_get0_cipher(ctx) : nullptr;
-#else
-    return ctx ? EVP_CIPHER_CTX_cipher(ctx) : nullptr;
-#endif
+    if (!ctx) return nullptr;
+
+    // Try OpenSSL 1.1+ API first
+    if (Dyn_EVP_CIPHER_CTX_get0_cipher) {
+        return Dyn_EVP_CIPHER_CTX_get0_cipher(ctx);
+    }
+
+    // Fallback to old API
+    if (Dyn_EVP_CIPHER_CTX_cipher) {
+        return Dyn_EVP_CIPHER_CTX_cipher(ctx);
+    }
+
+    return nullptr;
 }
 
 // ---- Original function pointers (to be detoured) ----
-static int (WINAPI* TrueEVP_EncryptInit_ex)(EVP_CIPHER_CTX*, const EVP_CIPHER*, ENGINE*, const unsigned char*, const unsigned char*) = EVP_EncryptInit_ex;
-static int (WINAPI* TrueEVP_DecryptInit_ex)(EVP_CIPHER_CTX*, const EVP_CIPHER*, ENGINE*, const unsigned char*, const unsigned char*) = EVP_DecryptInit_ex;
-static int (WINAPI* TrueEVP_CipherInit_ex)(EVP_CIPHER_CTX*, const EVP_CIPHER*, ENGINE*, const unsigned char*, const unsigned char*, int) = EVP_CipherInit_ex;
-static int (WINAPI* TrueEVP_CIPHER_CTX_ctrl)(EVP_CIPHER_CTX*, int, int, void*) = EVP_CIPHER_CTX_ctrl;
+// Initialize to nullptr - will be resolved at runtime via GetProcAddress to avoid linking to OpenSSL
+static int (*TrueEVP_EncryptInit_ex)(EVP_CIPHER_CTX*, const EVP_CIPHER*, ENGINE*, const unsigned char*, const unsigned char*) = nullptr;
+static int (*TrueEVP_DecryptInit_ex)(EVP_CIPHER_CTX*, const EVP_CIPHER*, ENGINE*, const unsigned char*, const unsigned char*) = nullptr;
+static int (*TrueEVP_CipherInit_ex)(EVP_CIPHER_CTX*, const EVP_CIPHER*, ENGINE*, const unsigned char*, const unsigned char*, int) = nullptr;
+static int (*TrueEVP_CIPHER_CTX_ctrl)(EVP_CIPHER_CTX*, int, int, void*) = nullptr;
+
+// Helper to dynamically resolve OpenSSL functions
+static bool ResolveOpenSSLFunctions()
+{
+    static bool resolved = false;
+    if (resolved) return true;
+
+    // Try to load libcrypto from the process
+    HMODULE hCrypto = GetModuleHandleA("libcrypto-3-x64.dll");
+    if (!hCrypto) {
+        hCrypto = GetModuleHandleA("libcrypto.dll");
+    }
+    if (!hCrypto) {
+        hCrypto = GetModuleHandleA("libeay32.dll"); // Old OpenSSL naming
+    }
+
+    if (!hCrypto) {
+        // Try to load it - first try without path
+        hCrypto = LoadLibraryA("libcrypto-3-x64.dll");
+    }
+    if (!hCrypto) {
+        hCrypto = LoadLibraryA("libcrypto.dll");
+    }
+    if (!hCrypto) {
+        hCrypto = LoadLibraryA("libeay32.dll");
+    }
+
+    if (!hCrypto) {
+        if (std::getenv("HOOK_VERBOSE")) {
+            fprintf(stderr, "[hook_windows] Could not load OpenSSL library\n");
+        }
+        return false;
+    }
+
+    if (std::getenv("HOOK_VERBOSE")) {
+        fprintf(stderr, "[hook_windows] OpenSSL library loaded successfully\n");
+    }
+
+    // Resolve main hook target functions
+    TrueEVP_EncryptInit_ex = reinterpret_cast<decltype(TrueEVP_EncryptInit_ex)>(
+        GetProcAddress(hCrypto, "EVP_EncryptInit_ex"));
+    TrueEVP_DecryptInit_ex = reinterpret_cast<decltype(TrueEVP_DecryptInit_ex)>(
+        GetProcAddress(hCrypto, "EVP_DecryptInit_ex"));
+    TrueEVP_CipherInit_ex = reinterpret_cast<decltype(TrueEVP_CipherInit_ex)>(
+        GetProcAddress(hCrypto, "EVP_CipherInit_ex"));
+    TrueEVP_CIPHER_CTX_ctrl = reinterpret_cast<decltype(TrueEVP_CIPHER_CTX_ctrl)>(
+        GetProcAddress(hCrypto, "EVP_CIPHER_CTX_ctrl"));
+
+    // Resolve utility functions
+    Dyn_EVP_CIPHER_get0_name = reinterpret_cast<decltype(Dyn_EVP_CIPHER_get0_name)>(
+        GetProcAddress(hCrypto, "EVP_CIPHER_get0_name"));
+    Dyn_EVP_CIPHER_CTX_get0_cipher = reinterpret_cast<decltype(Dyn_EVP_CIPHER_CTX_get0_cipher)>(
+        GetProcAddress(hCrypto, "EVP_CIPHER_CTX_get0_cipher"));
+    Dyn_EVP_CIPHER_CTX_cipher = reinterpret_cast<decltype(Dyn_EVP_CIPHER_CTX_cipher)>(
+        GetProcAddress(hCrypto, "EVP_CIPHER_CTX_cipher"));
+    Dyn_EVP_CIPHER_key_length = reinterpret_cast<decltype(Dyn_EVP_CIPHER_key_length)>(
+        GetProcAddress(hCrypto, "EVP_CIPHER_key_length"));
+    Dyn_EVP_CIPHER_iv_length = reinterpret_cast<decltype(Dyn_EVP_CIPHER_iv_length)>(
+        GetProcAddress(hCrypto, "EVP_CIPHER_iv_length"));
+    Dyn_EVP_CIPHER_nid = reinterpret_cast<decltype(Dyn_EVP_CIPHER_nid)>(
+        GetProcAddress(hCrypto, "EVP_CIPHER_nid"));
+    Dyn_OBJ_nid2sn = reinterpret_cast<decltype(Dyn_OBJ_nid2sn)>(
+        GetProcAddress(hCrypto, "OBJ_nid2sn"));
+
+    // Require core functions, but key/iv length functions are optional (may not exist in all OpenSSL versions)
+    resolved = (TrueEVP_EncryptInit_ex && TrueEVP_DecryptInit_ex &&
+                TrueEVP_CipherInit_ex && TrueEVP_CIPHER_CTX_ctrl &&
+                Dyn_EVP_CIPHER_get0_name);
+
+    if (!resolved && std::getenv("HOOK_VERBOSE")) {
+        fprintf(stderr, "[hook_windows] Failed to resolve OpenSSL functions:\n");
+        if (!TrueEVP_EncryptInit_ex) fprintf(stderr, "[hook_windows]   - EVP_EncryptInit_ex\n");
+        if (!TrueEVP_DecryptInit_ex) fprintf(stderr, "[hook_windows]   - EVP_DecryptInit_ex\n");
+        if (!TrueEVP_CipherInit_ex) fprintf(stderr, "[hook_windows]   - EVP_CipherInit_ex\n");
+        if (!TrueEVP_CIPHER_CTX_ctrl) fprintf(stderr, "[hook_windows]   - EVP_CIPHER_CTX_ctrl\n");
+        if (!Dyn_EVP_CIPHER_get0_name) fprintf(stderr, "[hook_windows]   - EVP_CIPHER_get0_name\n");
+        if (!Dyn_EVP_CIPHER_key_length) fprintf(stderr, "[hook_windows]   - EVP_CIPHER_key_length\n");
+        if (!Dyn_EVP_CIPHER_iv_length) fprintf(stderr, "[hook_windows]   - EVP_CIPHER_iv_length\n");
+    }
+
+    return resolved;
+}
 
 // ---- Common logging helper ----
 static inline void log_init_ex(const char* api, const char* dir,
@@ -42,8 +151,8 @@ static inline void log_init_ex(const char* api, const char* dir,
 {
     const EVP_CIPHER* c = type ? type : cipher_from_ctx(ctx);
     const char* cname = cipher_name(c);
-    int klen = (key && c) ? EVP_CIPHER_key_length(c) : 0;
-    int ivlen = (iv && c) ? EVP_CIPHER_iv_length(c) : 0;
+    int klen = (key && c && Dyn_EVP_CIPHER_key_length) ? Dyn_EVP_CIPHER_key_length(c) : 0;
+    int ivlen = (iv && c && Dyn_EVP_CIPHER_iv_length) ? Dyn_EVP_CIPHER_iv_length(c) : 0;
 
     if (cname) {
         openssl_state_remember(ctx,
@@ -137,6 +246,15 @@ extern "C" {
 
 BOOL InstallOpenSSLHooks()
 {
+    // First, try to resolve OpenSSL functions dynamically
+    if (!ResolveOpenSSLFunctions()) {
+        // OpenSSL not loaded yet or not available - hooks will be inactive
+        if (std::getenv("HOOK_VERBOSE")) {
+            fprintf(stderr, "[hook_windows] OpenSSL functions not found - hooks will not be installed\n");
+        }
+        return FALSE;
+    }
+
     BOOL success = TRUE;
 
     DetourTransactionBegin();
@@ -149,7 +267,14 @@ BOOL InstallOpenSSLHooks()
 
     LONG error = DetourTransactionCommit();
     if (error != NO_ERROR) {
+        if (std::getenv("HOOK_VERBOSE")) {
+            fprintf(stderr, "[hook_windows] DetourTransactionCommit failed with error: %ld\n", error);
+        }
         success = FALSE;
+    } else {
+        if (std::getenv("HOOK_VERBOSE")) {
+            fprintf(stderr, "[hook_windows] OpenSSL hooks installed successfully\n");
+        }
     }
 
     return success;
