@@ -1,0 +1,59 @@
+# Qt/qmake
+.qmake.stash
+
+# crypto-scanner-gui
+crypto-scanner-gui/dist
+crypto-scanner-gui/node_modules
+crypto-scanner-gui/test_localStorage.js
+crypto-scanner-gui/src/main/*.exe
+crypto-scanner-gui/src/main/*.dll
+
+# CryptoScanner
+CryptoScanner/*.o
+CryptoScanner/*.obj
+CryptoScanner/*.exe
+CryptoScanner/*.dll
+CryptoScanner/CryptoScanner
+CryptoScanner/CryptoScannerCLI
+CryptoScanner/Makefile.*
+CryptoScanner/object_*
+CryptoScanner/Makefile
+CryptoScanner/debug
+CryptoScanner/release
+CryptoScanner/result
+CryptoScanner/logs
+
+# DynamicAnalysis
+DynamicAnalysis/build*
+DynamicAnalysis/build-macos
+DynamicAnalysis/build-linux
+DynamicAnalysis/build-windows
+DynamicAnalysis/logs
+
+# library
+CryptoScanner/third_party/miniz/*.o
+CryptoScanner/third_party/miniz/*.obj
+CryptoScanner/third_party/tree-sitter/lib/src/*.o
+CryptoScanner/third_party/tree-sitter/lib/src/*.obj
+CryptoScanner/third_party/tree-sitter-cpp/src/*.o
+CryptoScanner/third_party/tree-sitter-cpp/src/*.obj
+CryptoScanner/third_party/tree-sitter-java/src/*.o
+CryptoScanner/third_party/tree-sitter-java/src/*.obj
+CryptoScanner/third_party/tree-sitter-python/src/*.o
+CryptoScanner/third_party/tree-sitter-python/src/*.obj
+detours
+
+# 임시파일
+builder-debug.yml
+builder-effective-config.yaml
+nul
+
+# 기타
+mac-arm64
+linux-arm
+linux-amd
+win-amd
+win-unpacked
+.vscode
+.DS_Store
+.gitattributes

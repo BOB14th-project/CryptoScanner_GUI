@@ -134,21 +134,25 @@ cd C:\
 git clone https://github.com/BOB14th-project/CryptoScanner_GUI.git
 ```
 
-### 3️⃣ 백엔드 빌드
+### 3️⃣ 백엔드 빌드, 정적탐지 및 동적탐지 통합 빌드
 
 ```bash
 cd CryptoScanner_GUI\CryptoScanner
 .\windows_amd.bat
+
+cd ..\
+.\build_integrated_windows.bat
 ```
 
 ### 4️⃣ GUI 설치 및 실행
 
 ```bash
-cd ..\crypto-scanner-gui
+cd crypto-scanner-gui
 
 # npm 명령어
 npm install
 npm run build
+npm run copy-backend
 npm run dist:win-amd
 
 cd ..\win-amd

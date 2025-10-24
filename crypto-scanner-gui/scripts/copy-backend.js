@@ -13,7 +13,13 @@ if (!fs.existsSync(destDir)) {
 const filesToCopy = [
   { src: path.join(sourceDir, 'CryptoScanner'), dest: path.join(destDir, 'CryptoScanner'), optional: true },
   { src: path.join(sourceDir, 'CryptoScannerCLI'), dest: path.join(destDir, 'CryptoScannerCLI'), optional: true },
+  { src: path.join(sourceDir, 'CryptoScannerCLI.exe'), dest: path.join(destDir, 'CryptoScannerCLI.exe'), optional: true },
   { src: path.join(sourceDir, 'CryptoScanner.exe'), dest: path.join(destDir, 'CryptoScanner.exe'), optional: true },
+  { src: path.join(sourceDir, 'Qt5Core.dll'), dest: path.join(destDir, 'Qt5Core.dll'), optional: true },
+  { src: path.join(sourceDir, 'libgcc_s_seh-1.dll'), dest: path.join(destDir, 'libgcc_s_seh-1.dll'), optional: true },
+  { src: path.join(sourceDir, 'libstdc++-6.dll'), dest: path.join(destDir, 'libstdc++-6.dll'), optional: true },
+  { src: path.join(sourceDir, 'libwinpthread-1.dll'), dest: path.join(destDir, 'libwinpthread-1.dll'), optional: true },
+  { src: path.join(sourceDir, 'libatomic-1.dll'), dest: path.join(destDir, 'libatomic-1.dll'), optional: true },
   { src: path.join(sourceDir, 'patterns.json'), dest: path.join(destDir, 'patterns.json'), optional: false },
 ];
 
@@ -34,11 +40,20 @@ if (fs.existsSync(dynamicAnalysisLibDir)) {
 }
 
 // Copy Windows dynamic analysis binaries if they exist
-const dynamicAnalysisWindowsDir = path.join(__dirname, '..', '..', 'DynamicAnalysis', 'build-windows', 'bin');
+const dynamicAnalysisWindowsDir = path.join(__dirname, '..', '..', 'DynamicAnalysis', 'build-windows', 'bin', 'Release');
 if (fs.existsSync(dynamicAnalysisWindowsDir)) {
   filesToCopy.push(
     { src: path.join(dynamicAnalysisWindowsDir, 'dynamic_analysis_cli.exe'), dest: path.join(destDir, 'dynamic_analysis_cli.exe'), optional: true },
-    { src: path.join(dynamicAnalysisWindowsDir, 'hook.dll'), dest: path.join(destDir, 'hook.dll'), optional: true }
+    { src: path.join(dynamicAnalysisWindowsDir, 'hook.dll'), dest: path.join(destDir, 'hook.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'libcrypto-3-x64.dll'), dest: path.join(destDir, 'libcrypto-3-x64.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'libssl-3-x64.dll'), dest: path.join(destDir, 'libssl-3-x64.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'libgcc_s_seh-1.dll'), dest: path.join(destDir, 'libgcc_s_seh-1.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'libstdc++-6.dll'), dest: path.join(destDir, 'libstdc++-6.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'libwinpthread-1.dll'), dest: path.join(destDir, 'libwinpthread-1.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'libatomic-1.dll'), dest: path.join(destDir, 'libatomic-1.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'msvcp140.dll'), dest: path.join(destDir, 'msvcp140.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'vcruntime140.dll'), dest: path.join(destDir, 'vcruntime140.dll'), optional: true },
+    { src: path.join(dynamicAnalysisWindowsDir, 'vcruntime140_1.dll'), dest: path.join(destDir, 'vcruntime140_1.dll'), optional: true }
   );
 }
 
