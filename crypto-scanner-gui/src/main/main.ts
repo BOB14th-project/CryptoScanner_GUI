@@ -1,8 +1,148 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
+import * as https from 'https';
 
 console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
+
+// FastAPI 서버 URL
+const API_BASE_URL = 'https://harper-abler-agape.ngrok-free.dev';
+
+// API 호출 헬퍼 함수
+async function callAPI(endpoint: string, method: string = 'GET', body?: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(endpoint, API_BASE_URL);
+
+    const options: any = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+    };
+
+    const req = https.request(url, options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed);
+        } catch (e) {
+          console.error('Failed to parse API response:', e);
+          reject(e);
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      console.error('API call error:', error);
+      reject(error);
+    });
+
+    if (body) {
+      req.write(JSON.stringify(body));
+    }
+
+    req.end();
+  });
+}
+
+// 파일 업로드 API 호출 함수
+async function uploadFilesToAPI(
+  fileId: number,
+  scanId: number,
+  asmFile?: Buffer,
+  binFile?: Buffer,
+  asmFilename?: string,
+  binFilename?: string
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`/files/${fileId}/upload_files/?scan_id=${scanId}`, API_BASE_URL);
+
+    // Multipart form data boundary
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+
+    const parts: Buffer[] = [];
+
+    // ASM 파일 추가
+    if (asmFile && asmFilename) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="asm_file"; filename="${asmFilename}"\r\n` +
+        `Content-Type: application/octet-stream\r\n\r\n`
+      ));
+      parts.push(asmFile);
+      parts.push(Buffer.from('\r\n'));
+
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="asm_filename"\r\n\r\n` +
+        `${asmFilename}\r\n`
+      ));
+    }
+
+    // BIN 파일 추가
+    if (binFile && binFilename) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="bin_file"; filename="${binFilename}"\r\n` +
+        `Content-Type: application/octet-stream\r\n\r\n`
+      ));
+      parts.push(binFile);
+      parts.push(Buffer.from('\r\n'));
+
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="bin_filename"\r\n\r\n` +
+        `${binFilename}\r\n`
+      ));
+    }
+
+    parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+    const body = Buffer.concat(parts);
+
+    const options: any = {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+        'ngrok-skip-browser-warning': 'true',
+      },
+    };
+
+    const req = https.request(url, options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed);
+        } catch (e) {
+          console.error('Failed to parse API response:', e);
+          reject(e);
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      console.error('File upload error:', error);
+      reject(error);
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
 
 let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
@@ -990,6 +1130,273 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
         console.log(`  - Dynamic only: ${dynamicOnlyDetections.length}`);
 
         if (code === 0) {
+          // 데이터베이스에 결과 저장
+          const saveToDatabase = async () => {
+            try {
+              emitProgress('Saving results to database...', mergedDetections.length);
+
+              // 1. 스캔 생성
+              const scanResponse = await callAPI('/scans/', 'POST');
+              const scanId = scanResponse.Scan_id;
+              console.log('Created scan with ID:', scanId);
+
+              // OS별 result 폴더 경로 결정
+              const getResultDirectory = (): string => {
+                const possiblePaths = [
+                  // Scanner creates result folder in its working directory (dist/main/result)
+                  path.resolve(__dirname, 'result'),
+                  // Development mode - from crypto-scanner-gui/dist/main
+                  path.resolve(__dirname, '..', '..', '..', 'CryptoScanner', 'result'),
+                  // Development mode - from crypto-scanner-gui
+                  path.resolve(__dirname, '..', '..', 'CryptoScanner', 'result'),
+                  // Absolute path
+                  '/Users/jungjinho/Desktop/CryptoScanner_GUI/CryptoScanner/result',
+                ];
+
+                // Packaged app - search upwards from resources path
+                if (process.resourcesPath) {
+                  let searchPath = process.resourcesPath;
+                  for (let i = 0; i < 7; i++) {
+                    searchPath = path.dirname(searchPath);
+                    possiblePaths.push(path.join(searchPath, 'CryptoScanner', 'result'));
+                    possiblePaths.push(path.join(searchPath, 'CryptoScanner_GUI', 'CryptoScanner', 'result'));
+                  }
+                }
+
+                // Find first existing path
+                for (const testPath of possiblePaths) {
+                  if (fs.existsSync(testPath)) {
+                    console.log('Found result directory:', testPath);
+                    return testPath;
+                  }
+                }
+
+                // Fallback - scanner working directory
+                console.warn('Result directory not found, using scanner working directory');
+                return path.resolve(__dirname, 'result');
+              };
+
+              const resultDir = getResultDirectory();
+
+              // 파일별로 그룹화
+              const fileGroups = new Map<string, any[]>();
+              for (const detection of mergedDetections) {
+                const filePath = detection.filePath;
+                if (!fileGroups.has(filePath)) {
+                  fileGroups.set(filePath, []);
+                }
+                fileGroups.get(filePath)!.push(detection);
+              }
+
+              // 각 파일에 대해 처리
+              for (const [filePath, fileDetections] of fileGroups.entries()) {
+                try {
+                  const fs = require('fs');
+                  let fileSize = 0;
+                  let fileType = 'unknown';
+
+                  try {
+                    const stats = fs.statSync(filePath);
+                    fileSize = stats.size;
+                    fileType = path.extname(filePath) || 'unknown';
+                  } catch (err) {
+                    console.warn(`Could not get file stats for ${filePath}:`, err);
+                  }
+
+                  // 2. 파일 생성
+                  const fileResponse = await callAPI(`/files/?scan_id=${scanId}`, 'POST', {
+                    File_name: path.basename(filePath),
+                    File_type: fileType,
+                    File_size: fileSize,
+                  });
+                  const fileId = fileResponse.File_id;
+                  console.log(`Created file with ID: ${fileId} for ${filePath}`);
+
+                  // 3. 정적 및 동적 분석 결과 저장
+                  for (const detection of fileDetections) {
+                    // 정적 분석 결과
+                    if (detection.detectionMethod === 'static' || detection.detectionMethod === 'static+dynamic') {
+                      const detectionMethodMap: any = {
+                        'text': 'text',
+                        'oid': 'oid',
+                        'parameter': 'parameter',
+                        'binary': 'text',
+                      };
+
+                      const severityMap: any = {
+                        'High': 'high',
+                        'Medium': 'medium',
+                        'Low': 'low',
+                      };
+
+                      await callAPI(`/files/${fileId}/static/`, 'POST', {
+                        File_id: fileId,
+                        Scan_id: scanId,
+                        Offset: detection.offset || 0,
+                        Algorithm_name: detection.algorithm || 'Unknown',
+                        Match: detection.matchString || '',
+                        Detection_method: detectionMethodMap[detection.evidenceType] || 'text',
+                        Severity: severityMap[detection.severity] || 'medium',
+                      });
+                      console.log(`Saved static analysis for ${detection.algorithm}`);
+                    }
+
+                    // 동적 분석 결과
+                    if (detection.detectionMethod === 'dynamic' || detection.detectionMethod === 'static+dynamic') {
+                      const keyLength = detection.dynamicKey ? detection.dynamicKey.length / 2 : null;
+
+                      await callAPI(`/files/${fileId}/dynamic/`, 'POST', {
+                        File_id: fileId,
+                        Scan_id: scanId,
+                        Parameter: detection.dynamicKey || null,
+                        Api: detection.dynamicApi || null,
+                        Key_length: keyLength,
+                        Algorithm_name: detection.algorithm || 'Unknown',
+                      });
+                      console.log(`Saved dynamic analysis for ${detection.algorithm}`);
+                    }
+                  }
+
+                  // 4. bin/asm 파일 저장 (Base64 인코딩 방식)
+                  try {
+                    // 파일명 추출 (확장자 포함)
+                    const fullFileName = path.basename(filePath);
+                    const fileNameWithoutExt = path.basename(filePath, path.extname(filePath));
+
+                    // result 폴더에서 해당 파일의 디렉토리 찾기
+                    // 예: putty.exe -> putty_exe
+                    const possibleDirNames = [
+                      fullFileName.replace(/\./g, '_'),           // putty.exe -> putty_exe
+                      fileNameWithoutExt,                          // putty
+                      fullFileName.toLowerCase().replace(/\./g, '_'), // PUTTY.EXE -> putty_exe
+                      fileNameWithoutExt.toLowerCase(),            // putty (소문자)
+                      fullFileName.replace(/\./g, '-'),           // putty.exe -> putty-exe
+                    ];
+
+                    console.log(`Looking for result directory for file: ${fullFileName}, trying: ${possibleDirNames.join(', ')}`);
+
+                    let fileResultDir: string | null = null;
+                    for (const dirName of possibleDirNames) {
+                      const testDir = path.join(resultDir, dirName);
+                      if (fs.existsSync(testDir)) {
+                        fileResultDir = testDir;
+                        console.log(`Found result directory: ${testDir}`);
+                        break;
+                      }
+                    }
+
+                    if (fileResultDir && fs.existsSync(fileResultDir)) {
+                      // bin과 asm 파일 찾기
+                      const files = fs.readdirSync(fileResultDir);
+
+                      let asmFileBuffer: Buffer | undefined;
+                      let binFileBuffer: Buffer | undefined;
+                      let asmFileName: string | undefined;
+                      let binFileName: string | undefined;
+
+                      for (const file of files) {
+                        const fullPath = path.join(fileResultDir, file);
+                        const stat = fs.statSync(fullPath);
+
+                        if (stat.isFile()) {
+                          const ext = path.extname(file).toLowerCase();
+
+                          // .asm 파일 읽기
+                          if (ext === '.asm') {
+                            try {
+                              asmFileBuffer = fs.readFileSync(fullPath);
+                              asmFileName = file;
+                              console.log(`Read ASM file: ${file} (${asmFileBuffer.length} bytes)`);
+                            } catch (asmError) {
+                              console.error(`Error reading ASM file ${file}:`, asmError);
+                            }
+                          }
+
+                          // .bin 파일 읽기
+                          else if (ext === '.bin') {
+                            try {
+                              binFileBuffer = fs.readFileSync(fullPath);
+                              binFileName = file;
+                              console.log(`Read BIN file: ${file} (${binFileBuffer.length} bytes)`);
+                            } catch (binError) {
+                              console.error(`Error reading BIN file ${file}:`, binError);
+                            }
+                          }
+                        }
+                        // chunks 폴더가 있는 경우 (큰 파일이 분할된 경우)
+                        else if (stat.isDirectory() && file.endsWith('.chunks')) {
+                          try {
+                            const chunkFiles = fs.readdirSync(fullPath);
+                            let combinedAsm = Buffer.alloc(0);
+
+                            // .asm 파일들을 정렬하여 합치기
+                            const asmFiles = chunkFiles.filter(f => f.endsWith('.asm')).sort();
+                            for (const asmFile of asmFiles) {
+                              const asmPath = path.join(fullPath, asmFile);
+                              const asmContent = fs.readFileSync(asmPath);
+                              combinedAsm = Buffer.concat([combinedAsm, Buffer.from(`\n\n--- ${asmFile} ---\n\n`), asmContent]);
+                            }
+
+                            if (combinedAsm.length > 0) {
+                              asmFileBuffer = combinedAsm;
+                              asmFileName = `${file.replace('.chunks', '')}_combined.asm`;
+                              console.log(`Read combined ASM chunks: ${asmFiles.length} files (${asmFileBuffer.length} bytes)`);
+                            }
+                          } catch (chunkError) {
+                            console.error(`Error processing chunks directory ${file}:`, chunkError);
+                          }
+                        }
+                      }
+
+                      // 파일 저장 (Base64 인코딩 방식)
+                      if (asmFileBuffer || binFileBuffer) {
+                        try {
+                          // ASM 파일 저장 (File_text 필드에)
+                          if (asmFileBuffer && asmFileName) {
+                            const asmBase64 = asmFileBuffer.toString('base64');
+                            await callAPI(`/files/${fileId}/llm/`, 'POST', {
+                              File_id: fileId,
+                              Scan_id: scanId,
+                              File_text: `[ASM_FILE:${asmFileName}]${asmBase64}`,
+                            });
+                            console.log(`Saved ASM file: ${asmFileName} (${asmFileBuffer.length} bytes)`);
+                          }
+
+                          // BIN 파일 저장 (Code 필드에)
+                          if (binFileBuffer && binFileName) {
+                            const binBase64 = binFileBuffer.toString('base64');
+                            await callAPI(`/files/${fileId}/llm_code/`, 'POST', {
+                              File_id: fileId,
+                              Scan_id: scanId,
+                              Code: `[BIN_FILE:${binFileName}]${binBase64}`,
+                            });
+                            console.log(`Saved BIN file: ${binFileName} (${binFileBuffer.length} bytes)`);
+                          }
+                        } catch (saveError) {
+                          console.error(`Error saving files for file ID ${fileId}:`, saveError);
+                        }
+                      }
+                    } else {
+                      console.log(`No result directory found for file: ${fullFileName} (tried: ${possibleDirNames.join(', ')})`);
+                    }
+                  } catch (resultError) {
+                    console.error(`Error processing result files for ${filePath}:`, resultError);
+                  }
+                } catch (fileError) {
+                  console.error(`Error saving file ${filePath} to database:`, fileError);
+                }
+              }
+
+              console.log('Successfully saved scan results to database');
+            } catch (dbError) {
+              console.error('Error saving to database:', dbError);
+              // 데이터베이스 저장 실패 시에도 스캔 결과는 반환
+            }
+          };
+
+          // 데이터베이스 저장 (비동기로 실행하되 완료를 기다림)
+          await saveToDatabase();
+
           resolve({
             success: true,
             output,
