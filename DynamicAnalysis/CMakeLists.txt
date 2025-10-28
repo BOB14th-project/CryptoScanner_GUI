@@ -548,6 +548,16 @@ if(WIN32 AND DETOURS_INCLUDE_DIR)
     endif()
 endif()
 
+# macOS: Copy DTrace script to build directory
+if(APPLE)
+    add_custom_command(TARGET dynamic_analysis_cli POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+            ${CMAKE_SOURCE_DIR}/scripts/macos_crypto_trace.d
+            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/macos_crypto_trace.d
+        COMMENT "Copying DTrace script to build directory"
+    )
+endif()
+
 # Java 지원이 가능한 경우 Java 테스트 추가 (Linux만)
 if(JNI_FOUND AND UNIX AND NOT APPLE)
     add_executable(java_process_detector tests/java/linux/java_process_detector.cpp)
