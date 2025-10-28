@@ -57,3 +57,7 @@ win-unpacked
 .vscode
 .DS_Store
 .gitattributes
+CryptoScanner-1.0.0-arm64-mac.zip
+CryptoScanner-1.0.0-arm64-mac.zip.blockmap
+CryptoScanner-1.0.0-arm64.dmg
+CryptoScanner-1.0.0-arm64.dmg.blockmap

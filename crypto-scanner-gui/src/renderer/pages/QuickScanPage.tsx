@@ -16,6 +16,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
 }) => {
   const [scanType, setScanType] = useState<ScanType>('folder');
   const [selectedPath, setSelectedPath] = useState<string>('');
+  const [manualPath, setManualPath] = useState<string>('');
 
   const handleSelectPath = async () => {
     console.log('handleSelectPath called');
@@ -44,7 +45,8 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
   };
 
   const handleStartScan = async () => {
-    if (!selectedPath || !window.electronAPI) return;
+    const pathToScan = manualPath || selectedPath;
+    if (!pathToScan || !window.electronAPI) return;
 
     try {
       onStartScan(true, scanType);
@@ -53,7 +55,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
       // Add minimum delay to show loading screen
       const [scanResult] = await Promise.all([
         window.electronAPI.startScan({
-          path: selectedPath,
+          path: pathToScan,
           type: scanType
         }),
         new Promise(resolve => setTimeout(resolve, 2000)) // 2 second minimum delay
@@ -66,7 +68,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
         date: localDate.toISOString().split('T')[0],
         time: now.toISOString(),
         type: 'QUICK_SCAN',
-        filePath: selectedPath,
+        filePath: pathToScan,
         nonPqcCount: scanResult.nonPqcCount || 0,
         fileCount: scanResult.fileCount || (scanType === 'file' ? 1 : 0),
         riskLevel: scanResult.nonPqcCount > 50 ? 'High' : scanResult.nonPqcCount > 10 ? 'Medium' : 'Low',
@@ -359,37 +361,89 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
             {scanType === 'folder' ? 'Scan all files in the folder.' : 'It scans only the selected single file.'}
           </p>
 
-          {/* File Path Display */}
-          {selectedPath && (
+          {/* File Path Display or Manual Input */}
+          <div style={{
+            width: '100%',
+            maxWidth: '522px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            {selectedPath && (
+              <div style={{
+                width: '100%',
+                height: '36px',
+                borderRadius: '18px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                backdropFilter: 'blur(10px)',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 16px',
+                gap: '8px'
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" stroke="#8C8C8C" strokeWidth="2"/>
+                </svg>
+                <span style={{
+                  fontFamily: 'SF Pro',
+                  fontSize: '15px',
+                  color: '#FFFFFF',
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  Selected: {selectedPath}
+                </span>
+              </div>
+            )}
+
+            {/* Manual Path Input */}
             <div style={{
               width: '100%',
-              maxWidth: '522px',
-              height: '36px',
-              borderRadius: '18px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              backdropFilter: 'blur(10px)',
               display: 'flex',
-              alignItems: 'center',
-              padding: '0 16px',
-              gap: '8px'
+              flexDirection: 'column',
+              gap: '6px'
             }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" stroke="#8C8C8C" strokeWidth="2"/>
-              </svg>
-              <span style={{
+              <label style={{
                 fontFamily: 'SF Pro',
-                fontSize: '15px',
-                color: '#FFFFFF',
-                flex: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
+                fontSize: '13px',
+                color: 'rgba(255, 255, 255, 0.7)',
+                paddingLeft: '4px'
               }}>
-                File Path: {selectedPath}
-              </span>
+                Or enter path manually:
+              </label>
+              <input
+                type="text"
+                value={manualPath}
+                onChange={(e) => setManualPath(e.target.value)}
+                placeholder={scanType === 'folder' ? '/path/to/folder' : '/path/to/file'}
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  borderRadius: '18px',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  backdropFilter: 'blur(10px)',
+                  padding: '0 16px',
+                  fontFamily: 'SF Pro',
+                  fontSize: '15px',
+                  color: '#FFFFFF',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = '1px solid rgba(255, 255, 255, 0.5)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                }}
+              />
             </div>
-          )}
+          </div>
 
           {/* Action Buttons */}
           <div style={{
@@ -428,7 +482,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
 
             <button
               onClick={handleStartScan}
-              disabled={!selectedPath}
+              disabled={!selectedPath && !manualPath}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -437,7 +491,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
                 gap: '8px',
                 width: 'clamp(240px, 18vw, 291px)',
                 height: '56px',
-                background: selectedPath
+                background: (selectedPath || manualPath)
                   ? 'linear-gradient(0deg, rgba(87, 90, 123, 0.3), rgba(87, 90, 123, 0.3)), rgba(136, 128, 148, 0.5)'
                   : 'rgba(100, 100, 100, 0.3)',
                 backgroundBlendMode: 'normal, overlay',
@@ -445,8 +499,8 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
                 backdropFilter: 'blur(10px)',
                 borderRadius: '999px',
                 border: 'none',
-                cursor: selectedPath ? 'pointer' : 'not-allowed',
-                opacity: selectedPath ? 1 : 0.5
+                cursor: (selectedPath || manualPath) ? 'pointer' : 'not-allowed',
+                opacity: (selectedPath || manualPath) ? 1 : 0.5
               }}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">

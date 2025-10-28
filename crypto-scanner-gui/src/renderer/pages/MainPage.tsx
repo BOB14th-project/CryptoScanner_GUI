@@ -7,6 +7,13 @@ interface MainPageProps {
 }
 
 const MainPage: React.FC<MainPageProps> = ({ onNavigate, onGoBack }) => {
+  const handleGoToStart = () => {
+    if (onGoBack) {
+      onGoBack();
+    }
+    onNavigate('start');
+  };
+
   return (
     <div style={{
       position: 'relative',
@@ -20,32 +27,89 @@ const MainPage: React.FC<MainPageProps> = ({ onNavigate, onGoBack }) => {
       alignItems: 'center',
       justifyContent: 'center'
     }}>
-      {/* Crypto Scanner 상단 */}
+      {/* Navigation and Header Container */}
       <div style={{
         display: 'flex',
-        flexDirection: 'row',
-        justifyContent: 'center',
         alignItems: 'center',
-        padding: '16px',
         gap: '8px',
         width: 'calc(3 * clamp(300px, 22vw, 371px) + 2 * clamp(20px, 2vw, 40px))',
         maxWidth: '1400px',
-        height: '56px',
-        marginBottom: '8vh',
-        background: 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
-        backgroundBlendMode: 'normal, overlay',
-        boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
-        backdropFilter: 'blur(10px)',
-        borderRadius: '999px'
+        marginBottom: '8vh'
       }}>
-        <span style={{
-          fontFamily: 'SF Pro Rounded',
-          fontStyle: 'normal',
-          fontWeight: 600,
-          fontSize: 'clamp(18px, 1.5vw, 24px)',
-          lineHeight: '24px',
-          color: '#FFFFFF'
-        }}>Crypto Scanner</span>
+        {/* Back Button */}
+        <button
+          onClick={handleGoToStart}
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '22px',
+            background: 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
+            backgroundBlendMode: 'normal, overlay',
+            boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            flexShrink: 0
+          }}
+        >
+          <span style={{
+            fontSize: '27px',
+            color: '#FFFFFF'
+          }}>‹</span>
+        </button>
+
+        {/* Home Button */}
+        <button
+          onClick={handleGoToStart}
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '22px',
+            background: 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
+            backgroundBlendMode: 'normal, overlay',
+            boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            flexShrink: 0
+          }}
+        >
+          <span style={{
+            fontSize: '22px',
+            color: '#FFFFFF'
+          }}>⌂</span>
+        </button>
+
+        {/* Crypto Scanner 상단 */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '16px',
+          flex: 1,
+          height: '56px',
+          background: 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
+          backgroundBlendMode: 'normal, overlay',
+          boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '999px'
+        }}>
+          <span style={{
+            fontFamily: 'SF Pro Rounded',
+            fontStyle: 'normal',
+            fontWeight: 600,
+            fontSize: 'clamp(18px, 1.5vw, 24px)',
+            lineHeight: '24px',
+            color: '#FFFFFF'
+          }}>Crypto Scanner</span>
+        </div>
       </div>
 
       {/* Main Content Container */}

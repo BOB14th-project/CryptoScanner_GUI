@@ -24,16 +24,37 @@ const filesToCopy = [
 ];
 
 // Copy dynamic analysis binaries
+// Priority: build (development) > build-macos (release) > build-linux/build-windows
+const dynamicAnalysisBuildDir = path.join(__dirname, '..', '..', 'DynamicAnalysis', 'build', 'bin');
+const dynamicAnalysisBuildLibDir = path.join(__dirname, '..', '..', 'DynamicAnalysis', 'build', 'lib');
 const dynamicAnalysisSourceDir = path.join(__dirname, '..', '..', 'DynamicAnalysis', 'build-macos', 'bin');
 const dynamicAnalysisLibDir = path.join(__dirname, '..', '..', 'DynamicAnalysis', 'build-macos', 'lib');
 
-if (fs.existsSync(dynamicAnalysisSourceDir)) {
+// DTrace scripts source directory
+const dtraceScriptsDir = path.join(__dirname, '..', '..', 'DynamicAnalysis', 'scripts');
+
+// Check 'build' directory first (for development builds)
+if (fs.existsSync(dynamicAnalysisBuildDir)) {
+  console.log('Using DynamicAnalysis from build/ directory (development)');
   filesToCopy.push(
-    { src: path.join(dynamicAnalysisSourceDir, 'dynamic_analysis_cli'), dest: path.join(destDir, 'dynamic_analysis_cli'), optional: true }
+    { src: path.join(dynamicAnalysisBuildDir, 'dynamic_analysis_cli'), dest: path.join(destDir, 'dynamic_analysis_cli'), optional: true },
+    { src: path.join(dtraceScriptsDir, 'macos_crypto_trace.d'), dest: path.join(destDir, 'macos_crypto_trace.d'), optional: true },
+    { src: path.join(dtraceScriptsDir, 'macos_crypto_trace_sandbox.d'), dest: path.join(destDir, 'macos_crypto_trace_sandbox.d'), optional: true }
+  );
+} else if (fs.existsSync(dynamicAnalysisSourceDir)) {
+  console.log('Using DynamicAnalysis from build-macos/ directory (release)');
+  filesToCopy.push(
+    { src: path.join(dynamicAnalysisSourceDir, 'dynamic_analysis_cli'), dest: path.join(destDir, 'dynamic_analysis_cli'), optional: true },
+    { src: path.join(dtraceScriptsDir, 'macos_crypto_trace.d'), dest: path.join(destDir, 'macos_crypto_trace.d'), optional: true },
+    { src: path.join(dtraceScriptsDir, 'macos_crypto_trace_sandbox.d'), dest: path.join(destDir, 'macos_crypto_trace_sandbox.d'), optional: true }
   );
 }
 
-if (fs.existsSync(dynamicAnalysisLibDir)) {
+if (fs.existsSync(dynamicAnalysisBuildLibDir)) {
+  filesToCopy.push(
+    { src: path.join(dynamicAnalysisBuildLibDir, 'libhook.dylib'), dest: path.join(destDir, 'libhook.dylib'), optional: true }
+  );
+} else if (fs.existsSync(dynamicAnalysisLibDir)) {
   filesToCopy.push(
     { src: path.join(dynamicAnalysisLibDir, 'libhook.dylib'), dest: path.join(destDir, 'libhook.dylib'), optional: true }
   );

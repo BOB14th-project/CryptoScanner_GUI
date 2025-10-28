@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import * as https from 'https';
+import * as fs from 'fs';
 
 console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
 
@@ -30,10 +31,13 @@ async function callAPI(endpoint: string, method: string = 'GET', body?: any): Pr
 
       res.on('end', () => {
         try {
+          console.log(`[API] ${method} ${endpoint} - Status: ${res.statusCode}`);
+          console.log('[API] Response preview:', data.substring(0, 200));
           const parsed = JSON.parse(data);
           resolve(parsed);
         } catch (e) {
-          console.error('Failed to parse API response:', e);
+          console.error(`[API Error] ${method} ${endpoint} failed:`, e);
+          console.error('[API Error] Raw response:', data.substring(0, 500));
           reject(e);
         }
       });
@@ -147,6 +151,64 @@ async function uploadFilesToAPI(
 let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
 let dynamicAnalysisProcess: ChildProcess | null = null;
+let isAdminMode = false;
+
+// Check if running with admin privileges (for macOS, check if sudo cached)
+async function checkAdminMode(): Promise<boolean> {
+  if (process.platform !== 'darwin') return false;
+
+  return new Promise((resolve) => {
+    const { exec } = require('child_process');
+    exec('sudo -n true 2>&1', (error: any) => {
+      resolve(!error);
+    });
+  });
+}
+
+// Interval for keeping sudo alive
+let sudoKeepAliveInterval: NodeJS.Timeout | null = null;
+
+// Request admin privileges using osascript (macOS GUI password prompt)
+async function requestAdminPrivileges(): Promise<boolean> {
+  if (process.platform !== 'darwin') return false;
+
+  return new Promise((resolve) => {
+    const { exec } = require('child_process');
+    // Use osascript to show a GUI password dialog and run sudo -v
+    // This will prompt for password and set sudo timestamp
+    const script = 'do shell script "sudo -v" with administrator privileges';
+    exec(`osascript -e '${script}'`, (error: any) => {
+      if (error) {
+        console.error('Failed to get admin privileges:', error);
+        resolve(false);
+      } else {
+        console.log('✅ Admin privileges granted');
+
+        // Now that we have admin privileges, keep the sudo timestamp alive
+        // by running sudo -v every 4 minutes (sudo timeout is typically 5 minutes)
+        if (sudoKeepAliveInterval) {
+          clearInterval(sudoKeepAliveInterval);
+        }
+
+        sudoKeepAliveInterval = setInterval(() => {
+          exec('sudo -n -v', (err: any) => {
+            if (err) {
+              console.warn('⚠️  Sudo timestamp expired, clearing keep-alive');
+              if (sudoKeepAliveInterval) {
+                clearInterval(sudoKeepAliveInterval);
+                sudoKeepAliveInterval = null;
+              }
+            } else {
+              console.log('✅ Sudo timestamp refreshed');
+            }
+          });
+        }, 4 * 60 * 1000); // Every 4 minutes
+
+        resolve(true);
+      }
+    });
+  });
+}
 
 function createWindow(): void {
   let preloadPath = path.join(__dirname, 'preload.js');
@@ -218,6 +280,22 @@ app.on('activate', () => {
 
 // IPC handlers
 console.log('=== IPC Handlers Registration Started ===');
+
+// Handle admin mode request
+ipcMain.handle('enable-admin-mode', async () => {
+  console.log('Admin mode requested');
+  const granted = await requestAdminPrivileges();
+  if (granted) {
+    isAdminMode = true;
+    console.log('Admin mode enabled');
+  }
+  return granted;
+});
+
+ipcMain.handle('check-admin-mode', async () => {
+  return isAdminMode || await checkAdminMode();
+});
+
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
@@ -374,6 +452,12 @@ async function runDynamicAnalysis(targetPath: string, scannerDir: string): Promi
       HOOK_VERBOSE: '0',
     };
 
+    // If admin mode is enabled, use DTrace for dynamic analysis
+    if (isAdminMode && process.platform === 'darwin') {
+      spawnEnv.USE_DTRACE = '1';
+      console.log('✅ Admin mode enabled - using DTrace for dynamic analysis');
+    }
+
     if (hookLibPath) {
       if (process.platform === 'darwin') {
         spawnEnv.DYLD_INSERT_LIBRARIES = hookLibPath;
@@ -391,6 +475,179 @@ async function runDynamicAnalysis(targetPath: string, scannerDir: string): Promi
       }
     }
 
+    // If admin mode is enabled on macOS, run with sudo for DTrace access
+    if (isAdminMode && process.platform === 'darwin') {
+      // Use osascript to run with administrator privileges (no password prompt if recently authenticated)
+      const { exec } = require('child_process');
+
+      // Copy DTrace scripts to /tmp for accessibility (osascript sandbox restrictions)
+      const dtraceScriptSource = path.join(binaryDir, 'macos_crypto_trace.d');
+      const dtraceScriptSandboxSource = path.join(binaryDir, 'macos_crypto_trace_sandbox.d');
+      const dtraceScriptTemp = '/tmp/macos_crypto_trace.d';
+      const dtraceScriptSandboxTemp = '/tmp/macos_crypto_trace_sandbox.d';
+
+      try {
+        if (fs.existsSync(dtraceScriptSource)) {
+          fs.copyFileSync(dtraceScriptSource, dtraceScriptTemp);
+          fs.chmodSync(dtraceScriptTemp, 0o644);
+          console.log('✅ Copied DTrace script to /tmp for elevated access');
+        }
+        if (fs.existsSync(dtraceScriptSandboxSource)) {
+          fs.copyFileSync(dtraceScriptSandboxSource, dtraceScriptSandboxTemp);
+          fs.chmodSync(dtraceScriptSandboxTemp, 0o644);
+          console.log('✅ Copied sandbox DTrace script to /tmp for elevated access');
+        }
+      } catch (err) {
+        console.warn('⚠️  Failed to copy DTrace script to /tmp:', err);
+      }
+
+      // Build environment variable string for the command
+      // Note: Don't pass DYLD_INSERT_LIBRARIES when using DTrace (they're mutually exclusive)
+      const envVarString = Object.entries(spawnEnv)
+        .filter(([key]) => key.startsWith('HOOK_') || key === 'USE_DTRACE')
+        .map(([key, value]) => `export ${key}="${value}";`)
+        .join(' ');
+
+      // Don't use cd, just run with absolute paths and export environment variables
+      const fullCommand = `${envVarString} "${dynamicAnalysisPath}" "${targetPath}"`;
+      const script = `do shell script "${fullCommand.replace(/"/g, '\\"')}" with administrator privileges`;
+
+      console.log('[Dynamic Analysis] Running with administrator privileges via osascript');
+
+      let output = '';
+      let errorOutput = '';
+      let actualLogFile = logFile;
+
+      const osascriptProcess = exec(`osascript -e '${script}'`, (error: any, stdout: string, stderr: string) => {
+        output = stdout;
+        errorOutput = stderr;
+
+        if (error) {
+          console.error('[Dynamic Analysis Error]', error);
+          console.error('[Dynamic Analysis Error Output]', stderr);
+        }
+
+        console.log('[Dynamic Analysis stdout]', stdout);
+        if (stderr) {
+          console.log('[Dynamic Analysis stderr]', stderr);
+        }
+
+        // Extract actual log file path
+        const logMatch = stdout.match(/\[dynamic_analysis\] log:\s+"([^"]+)"/);
+        if (logMatch) {
+          actualLogFile = logMatch[1];
+          console.log('Detected actual log file:', actualLogFile);
+        }
+
+        console.log(`Dynamic analysis process completed`);
+        console.log('Looking for log file at:', actualLogFile);
+
+        // Parse NDJSON log file
+        const detections: any[] = [];
+        if (fs.existsSync(actualLogFile)) {
+          try {
+            const logContent = fs.readFileSync(actualLogFile, 'utf-8');
+
+            // Remove ALL dtrace error messages (important for sandboxed apps like KakaoTalk)
+            const cleanContent = logContent
+              .split('\n')
+              .filter(line => !line.startsWith('dtrace:'))
+              .join('\n');
+
+            // Parse as JSON array (DTrace outputs JSON array format)
+            let events: any[] = [];
+            try {
+              events = JSON.parse(cleanContent);
+              if (!Array.isArray(events)) {
+                events = [];
+              }
+            } catch (parseErr) {
+              console.error('Failed to parse log file as JSON array:', parseErr);
+              events = [];
+            }
+
+            const detectionMap = new Map<string, any>();
+
+            for (const event of events) {
+              // Skip non-crypto events (trace_end, process_exit)
+              if (!event || event.event === 'trace_end' || event.event === 'process_exit') {
+                continue;
+              }
+
+              // Handle both OpenSSL (cipher field) and CommonCrypto (algorithm field) formats
+              let algorithmName = '';
+
+              if (event.cipher) {
+                // OpenSSL format: has cipher field directly
+                algorithmName = event.cipher;
+              } else if (event.algorithm !== undefined) {
+                // CommonCrypto format: map numeric algorithm codes to names
+                const algorithmMap: Record<number, string> = {
+                  0: 'None',
+                  1: 'SHA-1',     // kCCHmacAlgSHA1
+                  2: 'SHA-256',   // kCCDigestSHA256
+                  3: 'MD5',       // kCCDigestMD5
+                  4: 'SHA-384',   // kCCDigestSHA384
+                  5: 'SHA-224',   // kCCDigestSHA224
+                  8: 'SHA-512',   // kCCDigestSHA512
+                  10: 'RMD-160'   // kCCDigestRMD160
+                };
+                algorithmName = algorithmMap[event.algorithm] || `Algorithm-${event.algorithm}`;
+              } else {
+                // No algorithm information, skip
+                continue;
+              }
+
+              // Determine the function/API being used
+              const apiName = typeof event.api === 'string' ? event.api :
+                             (typeof event.function === 'string' ? event.function : event.event || '');
+              const surfaceName = typeof event.surface === 'string' ? event.surface : 'dynamic';
+              const direction = typeof event.dir === 'string' ? event.dir : '';
+              const evidenceLabel = direction ? `${surfaceName} (${direction})` : surfaceName;
+
+              const mapKey = [
+                surfaceName || 'dynamic',
+                apiName || 'unknown',
+                direction || 'any',
+                algorithmName
+              ].join('|');
+
+              const existing = detectionMap.get(mapKey) ?? {
+                filePath: targetPath,
+                offset: 0,
+                algorithm: algorithmName,
+                matchString: apiName || algorithmName,
+                evidenceType: evidenceLabel,
+                severity: 'High',
+                detectionMethod: 'dynamic',
+                dynamicMatchString: apiName || '',
+                dynamicEvidenceType: evidenceLabel,
+                dynamicApi: apiName || undefined
+              };
+
+              if (apiName) {
+                existing.matchString = existing.matchString || apiName;
+              }
+
+              detectionMap.set(mapKey, existing);
+            }
+
+            detections.push(...detectionMap.values());
+            console.log(`Dynamic analysis found ${detections.length} detections`);
+          } catch (err: any) {
+            console.error('Failed to read dynamic analysis log:', err);
+          }
+        } else {
+          console.log('Dynamic analysis log file not found');
+        }
+
+        resolve(detections);
+      });
+
+      return; // Exit early, we're using exec instead of spawn
+    }
+
+    // Non-admin mode: use regular spawn
     dynamicAnalysisProcess = spawn(dynamicAnalysisPath, [targetPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: binaryDir,
@@ -1213,22 +1470,73 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                   console.log(`Created file with ID: ${fileId} for ${filePath}`);
 
                   // 3. 정적 및 동적 분석 결과 저장
-                  for (const detection of fileDetections) {
-                    // 정적 분석 결과
-                    if (detection.detectionMethod === 'static' || detection.detectionMethod === 'static+dynamic') {
-                      const detectionMethodMap: any = {
-                        'text': 'text',
-                        'oid': 'oid',
-                        'parameter': 'parameter',
-                        'binary': 'text',
-                      };
+                  console.log(`[DB Save] Processing ${fileDetections.length} detections for file ${fileId}`);
+                  console.log(`[DB Save] Detection methods:`, fileDetections.map(d => d.detectionMethod).join(', '));
 
-                      const severityMap: any = {
-                        'High': 'high',
-                        'Medium': 'medium',
-                        'Low': 'low',
-                      };
+                  // 동적 분석 결과를 먼저 저장 (ngrok 제한 회피)
+                  const dynamicDetections = fileDetections.filter(d =>
+                    d.detectionMethod === 'dynamic' || d.detectionMethod === 'static+dynamic'
+                  );
+                  const staticDetections = fileDetections.filter(d =>
+                    d.detectionMethod === 'static' || d.detectionMethod === 'static+dynamic'
+                  );
 
+                  console.log(`[DB Save] Saving ${dynamicDetections.length} dynamic detections first...`);
+
+                  // 1️⃣ 동적 분석 먼저 저장
+                  for (const detection of dynamicDetections) {
+                    const keyLength = detection.dynamicKey ? detection.dynamicKey.length / 2 : 0;
+
+                    const dynamicData: any = {
+                      File_id: fileId,
+                      Scan_id: scanId,
+                      Algorithm_name: detection.algorithm || 'Unknown',
+                    };
+
+                    // Optional fields - only include if they have values
+                    if (detection.dynamicKey) {
+                      dynamicData.Parameter = detection.dynamicKey;
+                      dynamicData.Key_length = keyLength;
+                    } else {
+                      // Send empty string instead of null to avoid FastAPI validation error
+                      dynamicData.Parameter = '';
+                      dynamicData.Key_length = 0;
+                    }
+
+                    if (detection.dynamicApi) {
+                      dynamicData.Api = detection.dynamicApi;
+                    } else {
+                      dynamicData.Api = '';
+                    }
+
+                    console.log(`[Dynamic] Saving for ${detection.algorithm}:`, JSON.stringify(dynamicData));
+
+                    try {
+                      await callAPI(`/files/${fileId}/dynamic/`, 'POST', dynamicData);
+                      console.log(`✅ Saved dynamic analysis for ${detection.algorithm}`);
+                    } catch (err) {
+                      console.error(`❌ Failed to save dynamic analysis for ${detection.algorithm}:`, err);
+                    }
+                  }
+
+                  console.log(`[DB Save] Now saving ${staticDetections.length} static detections...`);
+
+                  // 2️⃣ 정적 분석 나중에 저장
+                  for (const detection of staticDetections) {
+                    const detectionMethodMap: any = {
+                      'text': 'text',
+                      'oid': 'oid',
+                      'parameter': 'parameter',
+                      'binary': 'text',
+                    };
+
+                    const severityMap: any = {
+                      'High': 'high',
+                      'Medium': 'medium',
+                      'Low': 'low',
+                    };
+
+                    try {
                       await callAPI(`/files/${fileId}/static/`, 'POST', {
                         File_id: fileId,
                         Scan_id: scanId,
@@ -1239,21 +1547,8 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                         Severity: severityMap[detection.severity] || 'medium',
                       });
                       console.log(`Saved static analysis for ${detection.algorithm}`);
-                    }
-
-                    // 동적 분석 결과
-                    if (detection.detectionMethod === 'dynamic' || detection.detectionMethod === 'static+dynamic') {
-                      const keyLength = detection.dynamicKey ? detection.dynamicKey.length / 2 : null;
-
-                      await callAPI(`/files/${fileId}/dynamic/`, 'POST', {
-                        File_id: fileId,
-                        Scan_id: scanId,
-                        Parameter: detection.dynamicKey || null,
-                        Api: detection.dynamicApi || null,
-                        Key_length: keyLength,
-                        Algorithm_name: detection.algorithm || 'Unknown',
-                      });
-                      console.log(`Saved dynamic analysis for ${detection.algorithm}`);
+                    } catch (err) {
+                      console.error(`Failed to save static analysis:`, err);
                     }
                   }
 
