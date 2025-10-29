@@ -87,6 +87,11 @@ rm -rf "$BUILD_DIR"
 
 # CMake 빌드 (OpenSSL만 사용)
 echo "CMake 구성 중..."
+ENABLE_NSS_FLAG="-DENABLE_NSS=OFF"
+if [ "$OS" = "Linux" ]; then
+    ENABLE_NSS_FLAG="-DENABLE_NSS=ON"
+fi
+
 cmake -S . -B "$BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
     -DENABLE_AF_ALG=OFF \
@@ -95,7 +100,7 @@ cmake -S . -B "$BUILD_DIR" \
     -DENABLE_MBEDTLS=OFF \
     -DENABLE_WOLFSSL=OFF \
     -DENABLE_GNUTLS=OFF \
-    -DENABLE_NSS=OFF \
+    "$ENABLE_NSS_FLAG" \
     -DCMAKE_CXX_FLAGS="-Wno-deprecated-declarations"
 
 echo "빌드 중..."
