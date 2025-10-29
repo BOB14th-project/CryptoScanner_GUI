@@ -330,28 +330,46 @@ if(ENABLE_NSS)
         find_path(NSPR_INCLUDE_DIR nspr/prio.h)
     endif()
 
-    if(NOT EXISTS "${P11KIT_INCLUDE_DIR}/p11-kit/pkcs11.h")
+    if(NOT P11KIT_INCLUDE_DIR OR NOT EXISTS "${P11KIT_INCLUDE_DIR}/p11-kit/pkcs11.h")
         find_path(P11KIT_INCLUDE_DIR p11-kit/pkcs11.h
-                  PATHS /usr/local/opt/p11-kit/include
+                  PATHS /usr/local/opt/p11-kit/include /opt/homebrew/opt/p11-kit/include
+                  PATH_SUFFIXES p11-kit-1
                   NO_DEFAULT_PATH)
     endif()
-    if(NOT EXISTS "${P11KIT_INCLUDE_DIR}/p11-kit/pkcs11.h")
-        find_path(P11KIT_INCLUDE_DIR p11-kit/pkcs11.h)
+    if(NOT P11KIT_INCLUDE_DIR OR NOT EXISTS "${P11KIT_INCLUDE_DIR}/p11-kit/pkcs11.h")
+        find_path(P11KIT_INCLUDE_DIR p11-kit/pkcs11.h
+                  PATH_SUFFIXES p11-kit-1)
     endif()
+
     find_library(NSS3_LIBRARY nss3 PATHS /opt/homebrew/lib /usr/local/lib)
     find_library(NSPR4_LIBRARY nspr4 PATHS /opt/homebrew/lib /usr/local/lib)
     find_library(PLDS4_LIBRARY plds4 PATHS /opt/homebrew/lib /usr/local/lib)
     find_library(PLC4_LIBRARY plc4 PATHS /opt/homebrew/lib /usr/local/lib)
-    if(NSS_INCLUDE_DIR AND NSPR_INCLUDE_DIR AND P11KIT_INCLUDE_DIR AND NSS3_LIBRARY AND NSPR4_LIBRARY AND PLDS4_LIBRARY AND PLC4_LIBRARY)
+
+    set(NSS_INCLUDE_DIRS ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR})
+    if(P11KIT_INCLUDE_DIR)
+        list(APPEND NSS_INCLUDE_DIRS ${P11KIT_INCLUDE_DIR})
+    endif()
+
+    if(NSS_INCLUDE_DIR AND NSPR_INCLUDE_DIR AND NSS3_LIBRARY AND NSPR4_LIBRARY AND PLDS4_LIBRARY AND PLC4_LIBRARY)
         set(NSS_FOUND ON)
         if(APPLE)
             target_sources(hook PRIVATE src/platform/mac/hooks/mac_hook_nss.cpp)
-            target_include_directories(hook PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}/nspr ${P11KIT_INCLUDE_DIR})
+            target_include_directories(hook PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}/nspr)
+            if(P11KIT_INCLUDE_DIR)
+                target_include_directories(hook PRIVATE ${P11KIT_INCLUDE_DIR})
+            endif()
         elseif(UNIX)
-            include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
+            include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}/nspr)
+            if(P11KIT_INCLUDE_DIR)
+                include_directories(${P11KIT_INCLUDE_DIR})
+            endif()
             target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_nss.cpp)
         elseif(WIN32)
-            target_include_directories(hook PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
+            target_include_directories(hook PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR})
+            if(P11KIT_INCLUDE_DIR)
+                target_include_directories(hook PRIVATE ${P11KIT_INCLUDE_DIR})
+            endif()
             # Windows NSS hook already included in HOOK_SRCS
         endif()
 

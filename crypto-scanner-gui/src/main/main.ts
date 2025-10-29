@@ -152,10 +152,12 @@ let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
 let dynamicAnalysisProcess: ChildProcess | null = null;
 let isAdminMode = false;
+let sudoPassword: string | null = null; // Store password for SUDO_ASKPASS
 
-// Check if running with admin privileges (for macOS, check if sudo cached)
+// Check if running with admin privileges (check if sudo cached)
 async function checkAdminMode(): Promise<boolean> {
-  if (process.platform !== 'darwin') return false;
+  // Only supported on macOS and Linux
+  if (process.platform !== 'darwin' && process.platform !== 'linux') return false;
 
   return new Promise((resolve) => {
     const { exec } = require('child_process');
@@ -168,46 +170,334 @@ async function checkAdminMode(): Promise<boolean> {
 // Interval for keeping sudo alive
 let sudoKeepAliveInterval: NodeJS.Timeout | null = null;
 
-// Request admin privileges using osascript (macOS GUI password prompt)
+// Request admin privileges using GUI password prompt
 async function requestAdminPrivileges(): Promise<boolean> {
-  if (process.platform !== 'darwin') return false;
+  // Only supported on macOS and Linux
+  if (process.platform !== 'darwin' && process.platform !== 'linux') return false;
 
   return new Promise((resolve) => {
-    const { exec } = require('child_process');
-    // Use osascript to show a GUI password dialog and run sudo -v
-    // This will prompt for password and set sudo timestamp
-    const script = 'do shell script "sudo -v" with administrator privileges';
-    exec(`osascript -e '${script}'`, (error: any) => {
-      if (error) {
-        console.error('Failed to get admin privileges:', error);
-        resolve(false);
-      } else {
-        console.log('✅ Admin privileges granted');
+    const { exec, execSync, spawn } = require('child_process');
 
-        // Now that we have admin privileges, keep the sudo timestamp alive
-        // by running sudo -v every 4 minutes (sudo timeout is typically 5 minutes)
-        if (sudoKeepAliveInterval) {
-          clearInterval(sudoKeepAliveInterval);
+    if (process.platform === 'darwin') {
+      // macOS: Use osascript to show a GUI password dialog
+      const script = 'do shell script "sudo -v" with administrator privileges';
+      const command = `osascript -e '${script}'`;
+
+      exec(command, (error: any) => {
+        if (error) {
+          console.error('Failed to get admin privileges:', error);
+          resolve(false);
+        } else {
+          console.log('✅ Admin privileges granted');
+          setupSudoKeepAlive(exec);
+          resolve(true);
         }
+      });
+    } else {
+      // Linux: Use Electron's own password dialog
+      console.log('🔐 Requesting admin privileges on Linux (Electron dialog)...');
 
-        sudoKeepAliveInterval = setInterval(() => {
-          exec('sudo -n -v', (err: any) => {
-            if (err) {
-              console.warn('⚠️  Sudo timestamp expired, clearing keep-alive');
-              if (sudoKeepAliveInterval) {
-                clearInterval(sudoKeepAliveInterval);
-                sudoKeepAliveInterval = null;
+      // Create a modal password dialog window
+      const passwordWindow = new BrowserWindow({
+        width: 450,
+        height: 280,
+        modal: true,
+        parent: mainWindow,
+        show: false,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        frame: true,
+        title: 'Administrator Authentication Required',
+        webPreferences: {
+          nodeIntegration: true,
+          contextIsolation: false
+        }
+      });
+
+      // HTML content for password dialog
+      const passwordDialogHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      padding: 20px;
+    }
+    .dialog {
+      width: 100%;
+      max-width: 400px;
+    }
+    h2 {
+      color: #ffffff;
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+    p {
+      color: #ffffff;
+      margin-bottom: 25px;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .input-group {
+      margin-bottom: 25px;
+    }
+    label {
+      display: block;
+      color: #ffffff;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #ffffff;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #ffffff;
+      color: #000000;
+    }
+    input[type="password"]:focus {
+      outline: none;
+      border-color: #ffffff;
+    }
+    .buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    button {
+      padding: 10px 24px;
+      border: 2px solid #ffffff;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #ffffff;
+      color: #000000;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #000000;
+      color: #ffffff;
+    }
+    .error {
+      color: #ff4444;
+      font-size: 12px;
+      margin-top: 8px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="dialog">
+    <h2>🔒 Administrator Authentication</h2>
+    <p>CryptoScanner needs administrator privileges to enable advanced dynamic analysis features.</p>
+    <div class="input-group">
+      <label for="password">Password:</label>
+      <input type="password" id="password" placeholder="Enter your sudo password" autofocus>
+      <div class="error" id="error">Incorrect password. Please try again.</div>
+    </div>
+    <div class="buttons">
+      <button id="cancelBtn">Cancel</button>
+      <button id="okBtn">OK</button>
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    const passwordInput = document.getElementById('password');
+    const okBtn = document.getElementById('okBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const errorDiv = document.getElementById('error');
+
+    okBtn.onclick = () => {
+      const password = passwordInput.value;
+      if (password) {
+        errorDiv.style.display = 'none';
+        ipcRenderer.send('password-submit', password);
+      }
+    };
+
+    cancelBtn.onclick = () => {
+      ipcRenderer.send('password-cancel');
+    };
+
+    passwordInput.onkeypress = (e) => {
+      if (e.key === 'Enter') {
+        okBtn.click();
+      }
+    };
+
+    ipcRenderer.on('password-error', () => {
+      errorDiv.style.display = 'block';
+      passwordInput.value = '';
+      passwordInput.focus();
+    });
+  </script>
+</body>
+</html>
+      `;
+
+      passwordWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(passwordDialogHTML));
+      passwordWindow.once('ready-to-show', () => {
+        passwordWindow.show();
+      });
+
+      // Handle password submission
+      ipcMain.once('password-submit', (event: any, password: string) => {
+        console.log('✓ Password received from dialog');
+
+        // Create a temporary askpass script (more reliable for GUI apps)
+        const tmpDir = require('os').tmpdir();
+        const askpassScript = path.join(tmpDir, `askpass-${Date.now()}.sh`);
+        const passwordFile = path.join(tmpDir, `sudopw-${Date.now()}.txt`);
+
+        try {
+          // Write password to temporary file
+          fs.writeFileSync(passwordFile, password, { mode: 0o600 });
+
+          // Create askpass script that reads the password file
+          // IMPORTANT: Output password with exactly one newline for sudo
+          // Use stdout explicitly and flush immediately
+          const askpassLog = path.join(tmpDir, `askpass-log-${Date.now()}.txt`);
+          const scriptContent = `#!/bin/bash
+echo "Askpass called at $(date)" >> "${askpassLog}" 2>&1
+PASSWORD=$(cat "${passwordFile}" 2>>"${askpassLog}")
+echo "Password read, length: \${#PASSWORD}" >> "${askpassLog}" 2>&1
+# Output to stdout with explicit newline, then flush
+printf "%s\\n" "$PASSWORD" 2>>"${askpassLog}"
+echo "Password printed to stdout" >> "${askpassLog}" 2>&1
+exit 0
+`;
+          fs.writeFileSync(askpassScript, scriptContent, { mode: 0o700 });
+
+          console.log('Created askpass script:', askpassScript);
+
+          // Debug: Write detailed log
+          const debugLog = path.join(tmpDir, `sudo-debug-${Date.now()}.log`);
+          fs.writeFileSync(debugLog, `Askpass: ${askpassScript}\nPassword file: ${passwordFile}\nAskpass log: ${askpassLog}\n`, { mode: 0o600 });
+          console.log('Debug log:', debugLog);
+          console.log('Askpass log:', askpassLog);
+
+          // Use SUDO_ASKPASS to provide password
+          const env = {
+            ...process.env,
+            SUDO_ASKPASS: askpassScript,
+            PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+          };
+
+          // Use 'sudo -A true' instead of 'sudo -A -v' as -v might not work on all systems
+          exec('/usr/bin/sudo -A /bin/true 2>&1', { env, shell: '/bin/bash' }, (error: any, stdout: string, stderr: string) => {
+            const output = stdout + stderr;
+            console.log('sudo -A /bin/true output:', output);
+            console.log('sudo error object:', error);
+            console.log('sudo exit code:', error?.code);
+
+            // Append to debug log
+            try {
+              fs.appendFileSync(debugLog, `\nsudo -A /bin/true:\nOutput: ${output}\nError: ${JSON.stringify(error)}\n`, { mode: 0o600 });
+            } catch (e) {}
+
+            if (error && (output.toLowerCase().includes('sorry') || output.toLowerCase().includes('incorrect') || output.toLowerCase().includes('failed'))) {
+              console.error('❌ Incorrect password');
+              console.error('sudo output:', output);
+
+              // Clean up temporary files (keep askpass log for debugging)
+              try {
+                fs.unlinkSync(passwordFile);
+                fs.unlinkSync(askpassScript);
+                console.log('Cleaned up temp files on error (keeping askpass log)');
+                console.log('Check askpass log:', askpassLog);
+              } catch (cleanupErr) {
+                console.warn('Failed to clean up temp files:', cleanupErr);
               }
+
+              passwordWindow.webContents.send('password-error');
             } else {
-              console.log('✅ Sudo timestamp refreshed');
+              console.log('✅ Password accepted (sudo -A /bin/true succeeded)');
+
+              // Clean up temporary files (keep askpass log for debugging)
+              try {
+                fs.unlinkSync(passwordFile);
+                fs.unlinkSync(askpassScript);
+                console.log('✅ Cleaned up temp files (keeping askpass log for debugging)');
+                console.log('Check askpass log:', askpassLog);
+              } catch (cleanupErr) {
+                console.warn('Failed to clean up temp files:', cleanupErr);
+              }
+
+              // NOTE: We skip timestamp verification because sudo timestamps are TTY-specific.
+              // When running from GUI (file manager), the timestamp won't persist.
+              // Instead, we'll use SUDO_ASKPASS each time we need sudo for dynamic analysis.
+              console.log('✅ Admin privileges successfully granted on Linux!');
+              console.log('ℹ️  Note: Will use SUDO_ASKPASS for each sudo operation (TTY-independent)');
+
+              // Store password for future SUDO_ASKPASS use
+              sudoPassword = password;
+              console.log('✅ Password stored for dynamic analysis');
+
+              passwordWindow.close();
+
+              // Don't set up keep-alive since timestamp doesn't persist in GUI session
+              // setupSudoKeepAlive(exec);
+
+              resolve(true);
             }
           });
-        }, 4 * 60 * 1000); // Every 4 minutes
+        } catch (err) {
+          console.error('❌ Failed to create askpass script:', err);
+          passwordWindow.webContents.send('password-error');
+        }
+      });
 
-        resolve(true);
+      // Handle password cancellation
+      ipcMain.once('password-cancel', () => {
+        console.log('❌ Password dialog cancelled');
+        passwordWindow.close();
+        resolve(false);
+      });
+
+      passwordWindow.on('closed', () => {
+        ipcMain.removeAllListeners('password-submit');
+        ipcMain.removeAllListeners('password-cancel');
+      });
+    }
+  });
+}
+
+// Helper function to set up sudo keep-alive
+function setupSudoKeepAlive(exec: any): void {
+  if (sudoKeepAliveInterval) {
+    clearInterval(sudoKeepAliveInterval);
+  }
+
+  sudoKeepAliveInterval = setInterval(() => {
+    exec('/usr/bin/sudo -n -v', { shell: '/bin/bash' }, (err: any) => {
+      if (err) {
+        console.warn('⚠️  Sudo timestamp expired, clearing keep-alive');
+        if (sudoKeepAliveInterval) {
+          clearInterval(sudoKeepAliveInterval);
+          sudoKeepAliveInterval = null;
+        }
+      } else {
+        console.log('✅ Sudo timestamp refreshed');
       }
     });
-  });
+  }, 4 * 60 * 1000); // Every 4 minutes
 }
 
 function createWindow(): void {
@@ -452,10 +742,25 @@ async function runDynamicAnalysis(targetPath: string, scannerDir: string): Promi
       HOOK_VERBOSE: '0',
     };
 
-    // If admin mode is enabled, use DTrace for dynamic analysis
+    // If admin mode is enabled, use advanced tracing for dynamic analysis
     if (isAdminMode && process.platform === 'darwin') {
       spawnEnv.USE_DTRACE = '1';
       console.log('✅ Admin mode enabled - using DTrace for dynamic analysis');
+    }
+
+    // Linux: Always enable enhanced monitoring to keep long-running targets alive.
+    // The monitor window is configurable via HOOK_MONITOR_SECONDS (defaults to 60s).
+    if (process.platform === 'linux') {
+      spawnEnv.USE_STRACE = '1';
+      const monitorSeconds = process.env.HOOK_MONITOR_SECONDS || '60';
+      spawnEnv.HOOK_MONITOR_SECONDS = monitorSeconds;
+      spawnEnv.MOZ_DISABLE_SANDBOX = '1';
+      spawnEnv.MOZ_DISABLE_CONTENT_SANDBOX = '1';
+      spawnEnv.MOZ_DISABLE_RDD_SANDBOX = '1';
+      spawnEnv.MOZ_DISABLE_GMP_SANDBOX = '1';
+      spawnEnv.MOZ_DISABLE_GPU_SANDBOX = '1';
+      spawnEnv.MOZ_FORCE_DISABLE_E10S = '1';
+      console.log(`✅ Linux: Using ${monitorSeconds}-second monitoring window for dynamic analysis`);
     }
 
     if (hookLibPath) {
@@ -475,50 +780,60 @@ async function runDynamicAnalysis(targetPath: string, scannerDir: string): Promi
       }
     }
 
-    // If admin mode is enabled on macOS, run with sudo for DTrace access
+    // If admin mode is enabled on macOS, run with elevated privileges for DTrace
+    // Linux: Always run as regular user (no sudo needed for LD_PRELOAD)
     if (isAdminMode && process.platform === 'darwin') {
-      // Use osascript to run with administrator privileges (no password prompt if recently authenticated)
       const { exec } = require('child_process');
 
-      // Copy DTrace scripts to /tmp for accessibility (osascript sandbox restrictions)
-      const dtraceScriptSource = path.join(binaryDir, 'macos_crypto_trace.d');
-      const dtraceScriptSandboxSource = path.join(binaryDir, 'macos_crypto_trace_sandbox.d');
-      const dtraceScriptTemp = '/tmp/macos_crypto_trace.d';
-      const dtraceScriptSandboxTemp = '/tmp/macos_crypto_trace_sandbox.d';
+      if (process.platform === 'darwin') {
+        // macOS: Copy DTrace scripts to /tmp for accessibility (osascript sandbox restrictions)
+        const dtraceScriptSource = path.join(binaryDir, 'macos_crypto_trace.d');
+        const dtraceScriptSandboxSource = path.join(binaryDir, 'macos_crypto_trace_sandbox.d');
+        const dtraceScriptTemp = '/tmp/macos_crypto_trace.d';
+        const dtraceScriptSandboxTemp = '/tmp/macos_crypto_trace_sandbox.d';
 
-      try {
-        if (fs.existsSync(dtraceScriptSource)) {
-          fs.copyFileSync(dtraceScriptSource, dtraceScriptTemp);
-          fs.chmodSync(dtraceScriptTemp, 0o644);
-          console.log('✅ Copied DTrace script to /tmp for elevated access');
+        try {
+          if (fs.existsSync(dtraceScriptSource)) {
+            fs.copyFileSync(dtraceScriptSource, dtraceScriptTemp);
+            fs.chmodSync(dtraceScriptTemp, 0o644);
+            console.log('✅ Copied DTrace script to /tmp for elevated access');
+          }
+          if (fs.existsSync(dtraceScriptSandboxSource)) {
+            fs.copyFileSync(dtraceScriptSandboxSource, dtraceScriptSandboxTemp);
+            fs.chmodSync(dtraceScriptSandboxTemp, 0o644);
+            console.log('✅ Copied sandbox DTrace script to /tmp for elevated access');
+          }
+        } catch (err) {
+          console.warn('⚠️  Failed to copy DTrace script to /tmp:', err);
         }
-        if (fs.existsSync(dtraceScriptSandboxSource)) {
-          fs.copyFileSync(dtraceScriptSandboxSource, dtraceScriptSandboxTemp);
-          fs.chmodSync(dtraceScriptSandboxTemp, 0o644);
-          console.log('✅ Copied sandbox DTrace script to /tmp for elevated access');
-        }
-      } catch (err) {
-        console.warn('⚠️  Failed to copy DTrace script to /tmp:', err);
       }
 
       // Build environment variable string for the command
-      // Note: Don't pass DYLD_INSERT_LIBRARIES when using DTrace (they're mutually exclusive)
       const envVarString = Object.entries(spawnEnv)
-        .filter(([key]) => key.startsWith('HOOK_') || key === 'USE_DTRACE')
+        .filter(([key]) => key.startsWith('HOOK_') || key === 'USE_DTRACE' || key === 'USE_STRACE')
         .map(([key, value]) => `export ${key}="${value}";`)
         .join(' ');
 
-      // Don't use cd, just run with absolute paths and export environment variables
+      // Build the command with absolute paths and environment variables
       const fullCommand = `${envVarString} "${dynamicAnalysisPath}" "${targetPath}"`;
-      const script = `do shell script "${fullCommand.replace(/"/g, '\\"')}" with administrator privileges`;
 
-      console.log('[Dynamic Analysis] Running with administrator privileges via osascript');
+      let execCommand: string;
+      if (process.platform === 'darwin') {
+        // macOS: Use osascript for GUI password prompt
+        const script = `do shell script "${fullCommand.replace(/"/g, '\\"')}" with administrator privileges`;
+        execCommand = `osascript -e '${script}'`;
+        console.log('[Dynamic Analysis] Running with administrator privileges via osascript');
+      } else {
+        // Linux: Use sudo (GUI password prompt handled by requestAdminPrivileges earlier)
+        execCommand = `sudo sh -c '${fullCommand.replace(/'/g, "'\\''")}'`;
+        console.log('[Dynamic Analysis] Running with administrator privileges via sudo');
+      }
 
       let output = '';
       let errorOutput = '';
       let actualLogFile = logFile;
 
-      const osascriptProcess = exec(`osascript -e '${script}'`, (error: any, stdout: string, stderr: string) => {
+      const adminProcess = exec(execCommand, (error: any, stdout: string, stderr: string) => {
         output = stdout;
         errorOutput = stderr;
 

@@ -11,7 +11,9 @@
 #include <vector>
 
 #include <cerrno>
+#include <cstdlib>
 #include <chrono>
+#include <thread>
 #include <ctime>
 
 #if defined(__linux__)
@@ -90,8 +92,24 @@ static HostOS detect_host_os() {
     return HostOS::Unsupported;
 #endif
 }
-
 #if defined(__linux__)
+static int read_monitor_seconds() {
+    constexpr int kDefaultSeconds = 30;
+    constexpr int kMaxSeconds = 600;
+
+    if (const char* env = std::getenv("HOOK_MONITOR_SECONDS"); env && *env) {
+        char* end = nullptr;
+        long parsed = std::strtol(env, &end, 10);
+        if (end && *end == '\0' && parsed > 0) {
+            if (parsed > kMaxSeconds) {
+                parsed = kMaxSeconds;
+            }
+            return static_cast<int>(parsed);
+        }
+    }
+    return kDefaultSeconds;
+}
+
 static std::filesystem::path locate_hook_library() {
     namespace fs = std::filesystem;
     std::vector<fs::path> candidates;
@@ -138,6 +156,114 @@ static bool is_executable(const std::filesystem::path& target) {
     return (st.st_mode & S_IXUSR) != 0;
 }
 
+// Linux strace-based dynamic analysis (requires sudo)
+static int run_linux_strace_analysis(const std::filesystem::path& target,
+                                     const std::filesystem::path& log_file) {
+    namespace fs = std::filesystem;
+
+    std::cout << "[dynamic_analysis] using strace for analysis (requires sudo)" << '\n';
+
+    // Start the target process in the background
+    std::string launch_cmd = "\"" + target.string() + "\" &";
+    std::cout << "[dynamic_analysis] launching: " + launch_cmd << '\n';
+    int launch_ret = system(launch_cmd.c_str());
+    if (launch_ret != 0) {
+        std::cerr << "[dynamic_analysis] failed to launch target" << '\n';
+        return 1;
+    }
+
+    // Wait for process to start
+    usleep(3000000); // 3 seconds
+
+    // Find the PID of the target process
+    std::string target_name = target.filename().string();
+    std::string pgrep_cmd = "pgrep -x \"" + target_name + "\" 2>/dev/null | head -1";
+
+    FILE* pgrep_pipe = popen(pgrep_cmd.c_str(), "r");
+    if (!pgrep_pipe) {
+        std::cerr << "[dynamic_analysis] failed to run pgrep" << '\n';
+        return 1;
+    }
+
+    char pid_buf[64] = {0};
+    if (!fgets(pid_buf, sizeof(pid_buf), pgrep_pipe)) {
+        pclose(pgrep_pipe);
+        std::cerr << "[dynamic_analysis] target process not found" << '\n';
+        return 1;
+    }
+    pclose(pgrep_pipe);
+
+    pid_t target_pid = static_cast<pid_t>(std::atoi(pid_buf));
+    if (target_pid <= 0) {
+        std::cerr << "[dynamic_analysis] invalid PID: " << pid_buf << '\n';
+        return 1;
+    }
+
+    std::cout << "[dynamic_analysis] found target PID: " << target_pid << '\n';
+
+    // Run strace to monitor crypto library calls
+    // Focus on commonly used crypto libraries
+    std::string strace_output = log_file.string() + ".strace";
+    std::string strace_cmd = "strace -f -e trace=openat,read,write -p " +
+                            std::to_string(target_pid) +
+                            " -o \"" + strace_output + "\" 2>&1 &";
+
+    std::cout << "[dynamic_analysis] starting strace on PID " << target_pid << '\n';
+    system(strace_cmd.c_str());
+
+    const int monitor_seconds = read_monitor_seconds();
+    std::cout << "[dynamic_analysis] monitoring for " << monitor_seconds << " seconds..." << '\n';
+    std::this_thread::sleep_for(std::chrono::seconds(monitor_seconds));
+
+    // Stop strace
+    system("pkill -TERM strace 2>/dev/null");
+    usleep(1000000); // 1 second
+
+    // Stop target process
+    std::cout << "[dynamic_analysis] stopping target process..." << '\n';
+    kill(target_pid, SIGTERM);
+    usleep(2000000); // 2 seconds
+    kill(target_pid, SIGKILL);
+
+    // Parse strace output and create NDJSON log
+    std::cout << "[dynamic_analysis] parsing strace output..." << '\n';
+
+    std::ifstream strace_in(strace_output);
+    std::ofstream ndjson_out(log_file);
+
+    if (strace_in.good() && ndjson_out.good()) {
+        std::string line;
+        int event_count = 0;
+
+        while (std::getline(strace_in, line)) {
+            // Look for crypto library loading
+            if (line.find("libcrypto") != std::string::npos ||
+                line.find("libssl") != std::string::npos ||
+                line.find("libgcrypt") != std::string::npos ||
+                line.find("libsodium") != std::string::npos ||
+                line.find("libmbedcrypto") != std::string::npos ||
+                line.find("libgnutls") != std::string::npos ||
+                line.find("libnss") != std::string::npos) {
+
+                // Create a basic detection event
+                ndjson_out << "{\"event\":\"crypto_library_detected\",\"detail\":\""
+                          << line << "\",\"timestamp\":" << event_count++ << "}\n";
+            }
+        }
+
+        std::cout << "[dynamic_analysis] found " << event_count << " crypto-related events" << '\n';
+    }
+
+    strace_in.close();
+    ndjson_out.close();
+
+    // Clean up strace output
+    std::error_code remove_ec;
+    fs::remove(strace_output, remove_ec);
+
+    return 0;
+}
+
 static int run_linux_dynamic_analysis(const std::filesystem::path& directory,
                                       const std::filesystem::path& binary) {
     namespace fs = std::filesystem;
@@ -156,12 +282,6 @@ static int run_linux_dynamic_analysis(const std::filesystem::path& directory,
         return 1;
     }
 
-    fs::path hook = locate_hook_library();
-    if (hook.empty() || !fs::exists(hook)) {
-        std::cerr << "[dynamic_analysis] unable to locate libhook.so" << '\n';
-        return 1;
-    }
-
     fs::path log_file;
     if (const char* existing = std::getenv("HOOK_NDJSON"); existing && *existing) {
         log_file = existing;
@@ -173,6 +293,34 @@ static int run_linux_dynamic_analysis(const std::filesystem::path& directory,
     }
     std::error_code remove_ec;
     fs::remove(log_file, remove_ec);
+
+    // For sandboxed processes (e.g., Firefox), write hook output to /tmp and copy later.
+    fs::path hook_log_file = log_file;
+    bool use_temp_hook_log = false;
+    if (std::getenv("USE_STRACE") != nullptr) {
+        fs::path tmp_log = default_log_path(binary.filename());
+        if (!tmp_log.empty()) {
+            hook_log_file = tmp_log;
+            use_temp_hook_log = true;
+            if (!hook_log_file.parent_path().empty()) {
+                fs::create_directories(hook_log_file.parent_path());
+            }
+            fs::remove(hook_log_file, remove_ec);
+        }
+    }
+
+    // Get hook library path
+    fs::path hook = locate_hook_library();
+    if (hook.empty() || !fs::exists(hook)) {
+        std::cerr << "[dynamic_analysis] unable to locate libhook.so" << '\n';
+        return 1;
+    }
+
+    // Check if enhanced monitoring should be used (admin mode)
+    bool enhanced_mode = (std::getenv("USE_STRACE") != nullptr);
+    if (enhanced_mode) {
+        std::cout << "[dynamic_analysis] Enhanced monitoring mode enabled (admin mode)" << '\n';
+    }
 
     auto capture_env = [](const char* key) {
         const char* value = std::getenv(key);
@@ -192,7 +340,7 @@ static int run_linux_dynamic_analysis(const std::filesystem::path& directory,
 
     setenv("LD_PRELOAD", hook.c_str(), 1);
     setenv(HOOK_ENV_VERBOSE, "1", 1);
-    setenv("HOOK_NDJSON", log_file.c_str(), 1);
+    setenv("HOOK_NDJSON", hook_log_file.c_str(), 1);
 
     std::cout << "[dynamic_analysis] host: Linux" << '\n';
     std::cout << "[dynamic_analysis] preload: " << hook << '\n';
@@ -213,26 +361,59 @@ static int run_linux_dynamic_analysis(const std::filesystem::path& directory,
         return 1;
     }
 
+    // Declare status before if/else so it's available for return statements
     int status = 0;
-    if (waitpid(pid, &status, 0) < 0) {
-        perror("waitpid");
-        restore_env("LD_PRELOAD", prev_ld_preload);
-        restore_env(HOOK_ENV_VERBOSE, prev_hook_verbose);
-        restore_env("HOOK_NDJSON", prev_hook_ndjson);
-        return 1;
+
+    // If enhanced mode, monitor for a fixed duration then terminate
+    if (enhanced_mode) {
+        const int monitor_seconds = read_monitor_seconds();
+        std::cout << "[dynamic_analysis] Monitoring for " << monitor_seconds << " seconds..." << '\n';
+        std::this_thread::sleep_for(std::chrono::seconds(monitor_seconds));
+
+        std::cout << "[dynamic_analysis] Terminating target process..." << '\n';
+        kill(pid, SIGTERM);
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        kill(pid, SIGKILL); // Force kill if still running
+
+        waitpid(pid, &status, 0); // Clean up zombie process
+    } else {
+        // Normal mode: wait for process to exit
+        if (waitpid(pid, &status, 0) < 0) {
+            perror("waitpid");
+            restore_env("LD_PRELOAD", prev_ld_preload);
+            restore_env(HOOK_ENV_VERBOSE, prev_hook_verbose);
+            restore_env("HOOK_NDJSON", prev_hook_ndjson);
+            return 1;
+        }
+
+        if (WIFEXITED(status)) {
+            std::cout << "[dynamic_analysis] child exit code: " << WEXITSTATUS(status) << '\n';
+        } else if (WIFSIGNALED(status)) {
+            std::cout << "[dynamic_analysis] child terminated by signal: " << WTERMSIG(status) << '\n';
+        }
     }
 
     restore_env("LD_PRELOAD", prev_ld_preload);
     restore_env(HOOK_ENV_VERBOSE, prev_hook_verbose);
     restore_env("HOOK_NDJSON", prev_hook_ndjson);
 
-    if (WIFEXITED(status)) {
-        std::cout << "[dynamic_analysis] child exit code: " << WEXITSTATUS(status) << '\n';
-    } else if (WIFSIGNALED(status)) {
-        std::cout << "[dynamic_analysis] child terminated by signal: " << WTERMSIG(status) << '\n';
+    fs::path final_log = log_file;
+    if (use_temp_hook_log) {
+        std::error_code copy_ec;
+        if (fs::exists(hook_log_file)) {
+            fs::copy_file(hook_log_file, log_file,
+                          fs::copy_options::overwrite_existing, copy_ec);
+            if (!copy_ec) {
+                final_log = log_file;
+            } else {
+                final_log = hook_log_file;
+            }
+        } else {
+            final_log = hook_log_file;
+        }
     }
 
-    std::ifstream in(log_file);
+    std::ifstream in(final_log);
     if (!in.good()) {
         std::cout << "[dynamic_analysis] no hook output written." << '\n';
         return WIFEXITED(status) ? WEXITSTATUS(status) : 1;

@@ -33,7 +33,7 @@ CryptoScanner_GUI/
 sudo apt update
 
 # 필요한 패키지 설치
-sudo apt install build-essential qtbase5-dev libssl-dev pkg-config nodejs clang cmake
+sudo apt install build-essential qtbase5-dev libssl-dev pkg-config nodejs clang cmake libnss3-dev libnspr4-dev libp11-kit-dev
 ```
 
 ### 2️⃣ 저장소 복제
@@ -62,18 +62,25 @@ cd crypto-scanner-gui
 # npm 명령어
 npm install
 npm run build
+npm run copy-backend
 ```
 
 ### 5️⃣ 실행 - **AMD**
 
 ```bash
 npm run dist:linux-amd
+
+cd ../linux-amd
+./crypto-scanner-gui
 ```
 
 ### 6️⃣ 실행 - **ARM**
 
 ```bash
 npm run dist:linux-arm
+
+cd ../linux-arm
+./crypto-scanner-gui
 ```
 
 <br />
