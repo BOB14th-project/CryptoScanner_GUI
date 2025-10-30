@@ -80,6 +80,7 @@ if(WIN32)
         src/platform/windows/hooks/windows_hook_gnutls.cpp
         src/platform/windows/hooks/windows_hook_nss.cpp
         src/platform/windows/hooks/windows_hook_boringssl.cpp
+        src/platform/windows/hooks/windows_hook_bcrypt.cpp
         src/platform/windows/utils/windows_output.cpp
         src/platform/windows/utils/windows_crypto_utils.cpp
     )

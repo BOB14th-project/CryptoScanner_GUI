@@ -25,6 +25,9 @@ export interface Detection {
   dynamicIv?: string;
   dynamicTag?: string;
   dynamicApi?: string;
+  dynamicKeyLength?: number;
+  dynamicIvLength?: number;
+  dynamicTagLength?: number;
 }
 
 export interface ScanProgress {

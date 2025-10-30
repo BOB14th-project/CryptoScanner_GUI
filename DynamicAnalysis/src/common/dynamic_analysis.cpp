@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -15,6 +16,10 @@
 #include <chrono>
 #include <thread>
 #include <ctime>
+#include <sstream>
+#include <cctype>
+#include <unordered_set>
+#include <cwctype>
 
 #if defined(__linux__)
   #include <sys/stat.h>
@@ -24,6 +29,7 @@
 #elif defined(_WIN32) || defined(_WIN64)
   #include <windows.h>
   #include <detours.h>
+  #include <tlhelp32.h>
 #elif defined(__APPLE__) && defined(__MACH__)
   #include <mach-o/dyld.h>
   #include <sys/stat.h>
@@ -34,6 +40,16 @@
 #endif
 
 namespace {
+
+#if defined(_WIN32) || defined(_WIN64)
+static std::wstring to_lower_wstring(std::wstring value);
+static std::unordered_set<DWORD> collect_matching_processes(const std::wstring& normalized_target_path,
+                                                            const std::wstring& target_filename_lower);
+static void terminate_new_matching_processes(const std::wstring& normalized_target_path,
+                                             const std::wstring& target_filename_lower,
+                                             const std::unordered_set<DWORD>& baseline,
+                                             DWORD exclude_pid);
+#endif
 
 enum class HostOS {
     Linux,
@@ -63,8 +79,12 @@ static std::filesystem::path default_log_path(const std::filesystem::path& binar
     namespace fs = std::filesystem;
     std::error_code ec;
 
+#if defined(_WIN32) || defined(_WIN64)
+    fs::path logs_dir = fs::temp_directory_path(ec) / "crypto_scanner_logs";
+#else
     // Use /tmp instead of current_path() to avoid permission issues when running with sudo
     fs::path logs_dir = fs::path("/tmp") / "crypto_scanner_logs";
+#endif
     fs::create_directories(logs_dir, ec);
 
     fs::path stem_path = binary_name;
@@ -886,6 +906,200 @@ static std::filesystem::path locate_hook_dll() {
     return {};
 }
 
+static DWORD read_windows_monitor_timeout_ms() {
+    constexpr DWORD kDefaultSeconds = 45;
+    constexpr DWORD kMaxSeconds = 600;
+    DWORD seconds = kDefaultSeconds;
+
+    if (const char* env = std::getenv("HOOK_MONITOR_SECONDS"); env && *env) {
+        char* end = nullptr;
+        long parsed = std::strtol(env, &end, 10);
+        if (end && *end == '\0' && parsed >= 0) {
+            if (parsed > static_cast<long>(kMaxSeconds)) {
+                parsed = kMaxSeconds;
+            }
+            seconds = static_cast<DWORD>(parsed);
+        }
+    }
+
+    if (seconds == 0) {
+        return 0;
+    }
+    return seconds * 1000;
+}
+
+static bool is_chromium_browser_exe(const std::filesystem::path& target) {
+    static const std::unordered_set<std::string> chromium_names = {
+        "chrome.exe",
+        "chromium.exe",
+        "msedge.exe",
+        "brave.exe",
+        "vivaldi.exe",
+        "opera.exe",
+        "opera_browser.exe",
+        "operagx.exe"
+    };
+
+    std::string name = target.filename().string();
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return chromium_names.find(name) != chromium_names.end();
+}
+
+static std::string quote_argument(const std::string& arg) {
+    if (arg.empty()) {
+        return "\"\"";
+    }
+    bool needs_quotes = false;
+    for (char ch : arg) {
+        if (std::isspace(static_cast<unsigned char>(ch)) || ch == '"') {
+            needs_quotes = true;
+            break;
+        }
+    }
+    if (!needs_quotes) {
+        return arg;
+    }
+
+    std::string result;
+    result.reserve(arg.size() + 2);
+    result.push_back('"');
+
+    size_t backslash_count = 0;
+    for (char ch : arg) {
+        if (ch == '\\') {
+            ++backslash_count;
+            continue;
+        }
+        if (ch == '"') {
+            result.append(backslash_count * 2 + 1, '\\');
+            result.push_back('"');
+            backslash_count = 0;
+            continue;
+        }
+        if (backslash_count) {
+            result.append(backslash_count, '\\');
+            backslash_count = 0;
+        }
+        result.push_back(ch);
+    }
+    if (backslash_count) {
+        result.append(backslash_count * 2, '\\');
+    }
+    result.push_back('"');
+    return result;
+}
+
+static std::optional<std::string> get_env_var(const char* key) {
+    DWORD needed = GetEnvironmentVariableA(key, nullptr, 0);
+    if (needed == 0) {
+        return std::nullopt;
+    }
+    std::string value;
+    value.resize(static_cast<size_t>(needed - 1));
+    if (GetEnvironmentVariableA(key, value.data(), needed) == 0) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+static void restore_env_var(const char* key, const std::optional<std::string>& value) {
+    if (value.has_value()) {
+        SetEnvironmentVariableA(key, value->c_str());
+    } else {
+        SetEnvironmentVariableA(key, nullptr);
+    }
+}
+
+static std::filesystem::path create_temp_profile_dir(const std::string& prefix) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path base = fs::temp_directory_path(ec);
+    if (ec) return {};
+
+    fs::path root = base / "CryptoScanner" / "profiles";
+    fs::create_directories(root, ec);
+    if (ec) return {};
+
+    auto now = std::chrono::system_clock::now().time_since_epoch().count();
+    std::stringstream ss;
+    ss << prefix << "_" << std::hex << now;
+
+    fs::path candidate = root / ss.str();
+    fs::create_directories(candidate, ec);
+    if (ec) return {};
+    return candidate;
+}
+
+static void terminate_process_tree(DWORD root_pid) {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, root_pid);
+        if (process) {
+            TerminateProcess(process, 0);
+            CloseHandle(process);
+        }
+        return;
+    }
+
+    std::vector<PROCESSENTRY32> processes;
+    PROCESSENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    if (Process32First(snapshot, &entry)) {
+        do {
+            processes.push_back(entry);
+        } while (Process32Next(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+
+    std::vector<DWORD> stack{root_pid};
+    std::unordered_set<DWORD> visited;
+
+    while (!stack.empty()) {
+        DWORD pid = stack.back();
+        stack.pop_back();
+        if (!visited.insert(pid).second) {
+            continue;
+        }
+        for (const auto& proc : processes) {
+            if (proc.th32ParentProcessID == pid) {
+                stack.push_back(proc.th32ProcessID);
+            }
+        }
+        HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+        if (process) {
+            TerminateProcess(process, 0);
+            CloseHandle(process);
+        }
+    }
+}
+
+static void append_tls_events_from_keylog(const std::filesystem::path& key_log_path,
+                                          const std::filesystem::path& ndjson_path) {
+    namespace fs = std::filesystem;
+    if (!fs::exists(key_log_path)) return;
+
+    std::ifstream key_in(key_log_path);
+    if (!key_in.good()) return;
+
+    std::ofstream out(ndjson_path, std::ios::app);
+    if (!out.good()) return;
+
+    std::string line;
+    while (std::getline(key_in, line)) {
+        if (line.empty()) continue;
+        std::istringstream iss(line);
+        std::string label, client_random, secret;
+        if (!(iss >> label >> client_random >> secret)) continue;
+        if (secret.empty()) continue;
+
+        int keylen = static_cast<int>(secret.size() / 2);
+        out << "{\"surface\":\"tls\",\"api\":\"SSLKEYLOG\",\"dir\":\"enc\",\"cipher\":\"TLS\","
+               "\"client_random\":\""
+            << client_random << "\",\"key\":\"" << secret << "\",\"keylen\":" << keylen << "}\n";
+    }
+}
+
 static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
                                        const std::filesystem::path& binary) {
     namespace fs = std::filesystem;
@@ -927,21 +1141,56 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
     std::error_code remove_ec;
     fs::remove(log_file, remove_ec);
 
-    // Set environment variables
+    std::string hook_dll_str = hook_dll.string();
     std::string log_path = log_file.string();
-    SetEnvironmentVariable("HOOK_NDJSON", log_path.c_str());
-    SetEnvironmentVariable("HOOK_VERBOSE", "1");
-
-    // Create process with DLL injection using Detours
-    STARTUPINFO si = { sizeof(si) };
-    PROCESS_INFORMATION pi = { 0 };
-
-    std::string cmd_line = "\"" + target.string() + "\"";
-    std::vector<char> cmd_buffer(cmd_line.begin(), cmd_line.end());
-    cmd_buffer.push_back('\0');
 
     std::string target_str = target.string();
-    std::string hook_dll_str = hook_dll.string();
+    bool is_chromium = is_chromium_browser_exe(target);
+    std::wstring normalized_target_path = to_lower_wstring(target.wstring());
+    std::wstring target_filename_lower = to_lower_wstring(target.filename().wstring());
+    auto baseline_matching_pids = collect_matching_processes(normalized_target_path, target_filename_lower);
+
+    // Create process with DLL injection using Detours
+    STARTUPINFOA si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+
+    auto prev_hook_ndjson = get_env_var("HOOK_NDJSON");
+    auto prev_hook_verbose = get_env_var("HOOK_VERBOSE");
+    auto prev_hook_library = get_env_var("HOOK_LIBRARY_PATH");
+    auto prev_ssl_keylog = get_env_var("SSLKEYLOGFILE");
+
+    auto restore_envs = [&]() {
+        restore_env_var("HOOK_NDJSON", prev_hook_ndjson);
+        restore_env_var("HOOK_VERBOSE", prev_hook_verbose);
+        restore_env_var("HOOK_LIBRARY_PATH", prev_hook_library);
+        restore_env_var("SSLKEYLOGFILE", prev_ssl_keylog);
+    };
+
+    fs::path key_log_path = log_file;
+    key_log_path += ".keylog";
+    std::error_code remove_key_ec;
+    fs::remove(key_log_path, remove_key_ec);
+
+    SetEnvironmentVariableA("HOOK_NDJSON", log_path.c_str());
+    SetEnvironmentVariableA("HOOK_LIBRARY_PATH", hook_dll_str.c_str());
+    const char* verbose_value = prev_hook_verbose ? prev_hook_verbose->c_str() : "0";
+    SetEnvironmentVariableA("HOOK_VERBOSE", verbose_value);
+    SetEnvironmentVariableA("SSLKEYLOGFILE", key_log_path.string().c_str());
+
+    std::string cmd_line = quote_argument(target_str);
+    fs::path user_data_dir;
+
+    if (is_chromium) {
+        user_data_dir = create_temp_profile_dir("chromium_profile");
+        if (!user_data_dir.empty()) {
+            cmd_line += " --user-data-dir=" + quote_argument(user_data_dir.string());
+        }
+        cmd_line += " --ssl-key-log-file=" + quote_argument(key_log_path.string());
+        cmd_line += " --no-first-run --no-default-browser-check --disable-features=TranslateUI";
+    }
+
+    std::vector<char> cmd_buffer(cmd_line.begin(), cmd_line.end());
+    cmd_buffer.push_back('\0');
 
     // Set working directory to target's directory so it can find DLLs
     fs::path target_dir = target.parent_path();
@@ -953,6 +1202,7 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
         std::cout << "[dynamic_analysis] Hook DLL: " << hook_dll_str << '\n';
         std::cout << "[dynamic_analysis] Working directory: " << target_dir_str << '\n';
         std::cout << "[dynamic_analysis] Log file: " << log_path << '\n';
+        std::cout << "[dynamic_analysis] Key log: " << key_log_path.string() << '\n';
 
         // Verify files exist
         if (!fs::exists(target)) {
@@ -967,6 +1217,8 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
     // Use nullptr for environment to inherit parent's environment
     // The hook.dll and its dependencies must be accessible via system PATH or in target directory
 
+    const char* current_dir_cstr = target_dir_str.empty() ? nullptr : target_dir_str.c_str();
+
     BOOL success = DetourCreateProcessWithDllA(
         nullptr,                           // Application name (nullptr = use command line)
         cmd_buffer.data(),                 // Command line
@@ -975,7 +1227,7 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
         FALSE,                             // Inherit handles
         0,                                 // Creation flags
         nullptr,                           // Environment (inherit from parent)
-        nullptr,                           // Current directory (inherit from parent)
+        current_dir_cstr,                  // Current directory (use target directory when available)
         &si,                               // Startup info
         &pi,                               // Process info
         hook_dll_str.c_str(),              // DLL to inject
@@ -1003,6 +1255,7 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
                 std::cerr << "[dynamic_analysis] See https://docs.microsoft.com/en-us/windows/win32/debug/system-error-codes for error code details\n";
                 break;
         }
+        restore_envs();
         return 1;
     }
 
@@ -1010,8 +1263,51 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
         std::cout << "[dynamic_analysis] Process created successfully, PID: " << pi.dwProcessId << '\n';
     }
 
-    // Wait for process completion
-    WaitForSingleObject(pi.hProcess, INFINITE);
+    HANDLE job = CreateJobObjectA(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info{};
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info, sizeof(info)) ||
+            !AssignProcessToJobObject(job, pi.hProcess)) {
+            CloseHandle(job);
+            job = nullptr;
+        }
+    }
+
+    DWORD monitor_timeout_ms = read_windows_monitor_timeout_ms();
+
+    auto terminate_children = [&]() {
+        if (job) {
+            TerminateJobObject(job, 0);
+        } else {
+            terminate_process_tree(pi.dwProcessId);
+        }
+    };
+
+    DWORD wait_result = WaitForSingleObject(pi.hProcess, monitor_timeout_ms ? monitor_timeout_ms : INFINITE);
+    if (wait_result == WAIT_TIMEOUT) {
+        std::cout << "[dynamic_analysis] monitor timeout reached (" << monitor_timeout_ms / 1000
+                  << "s), terminating target" << '\n';
+        terminate_children();
+        TerminateProcess(pi.hProcess, 0);
+        WaitForSingleObject(pi.hProcess, 5000);
+    } else if (wait_result == WAIT_OBJECT_0 && monitor_timeout_ms) {
+        std::cout << "[dynamic_analysis] primary process exited; waiting " << monitor_timeout_ms / 1000
+                  << "s for child activity" << '\n';
+        Sleep(monitor_timeout_ms);
+        terminate_children();
+    } else if (wait_result == WAIT_FAILED) {
+        DWORD err = GetLastError();
+        std::cerr << "[dynamic_analysis] WaitForSingleObject failed (error=" << err << ")\n";
+    }
+
+    if (job) {
+        CloseHandle(job); // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE ensures remaining children terminate
+        job = nullptr;
+    }
+
+    terminate_new_matching_processes(
+        normalized_target_path, target_filename_lower, baseline_matching_pids, pi.dwProcessId);
 
     DWORD exit_code;
     GetExitCodeProcess(pi.hProcess, &exit_code);
@@ -1019,6 +1315,16 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+
+    restore_envs();
+
+    append_tls_events_from_keylog(key_log_path, log_file);
+
+    std::error_code cleanup_ec;
+    if (!user_data_dir.empty()) {
+        fs::remove_all(user_data_dir, cleanup_ec);
+    }
+    fs::remove(key_log_path, cleanup_ec);
 
     // Read and display log file
     std::ifstream in(log_file);
@@ -1038,6 +1344,92 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
 #endif
 
 } // namespace
+
+#if defined(_WIN32) || defined(_WIN64)
+namespace {
+
+static std::wstring to_lower_wstring(std::wstring value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](wchar_t ch) {
+        return static_cast<wchar_t>(std::towlower(ch));
+    });
+    return value;
+}
+
+static std::unordered_set<DWORD> collect_matching_processes(const std::wstring& normalized_target_path,
+                                                            const std::wstring& target_filename_lower) {
+    std::unordered_set<DWORD> matches;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return matches;
+    }
+
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    if (!Process32FirstW(snapshot, &entry)) {
+        CloseHandle(snapshot);
+        return matches;
+    }
+
+    do {
+        if (entry.th32ProcessID == 0) continue;
+
+        std::wstring exe_lower = to_lower_wstring(std::wstring(entry.szExeFile));
+        if (!target_filename_lower.empty() && exe_lower != target_filename_lower) {
+            continue;
+        }
+
+        bool inserted = false;
+        if (!normalized_target_path.empty()) {
+            HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
+            if (process) {
+                std::vector<wchar_t> buffer(32768, L'\0');
+                DWORD len = static_cast<DWORD>(buffer.size());
+                if (QueryFullProcessImageNameW(process, 0, buffer.data(), &len) && len > 0) {
+                    std::wstring image_path(buffer.data(), len);
+                    std::wstring image_lower = to_lower_wstring(image_path);
+                    if (image_lower == normalized_target_path) {
+                        matches.insert(entry.th32ProcessID);
+                        inserted = true;
+                        CloseHandle(process);
+                        continue;
+                    }
+                }
+                CloseHandle(process);
+            }
+        }
+
+        if (!inserted) {
+            matches.insert(entry.th32ProcessID);
+        }
+    } while (Process32NextW(snapshot, &entry));
+
+    CloseHandle(snapshot);
+    return matches;
+}
+
+static void terminate_new_matching_processes(const std::wstring& normalized_target_path,
+                                             const std::wstring& target_filename_lower,
+                                             const std::unordered_set<DWORD>& baseline,
+                                             DWORD exclude_pid) {
+    auto current = collect_matching_processes(normalized_target_path, target_filename_lower);
+    for (DWORD pid : current) {
+        if (pid == exclude_pid || baseline.count(pid)) {
+            continue;
+        }
+
+        HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+        if (!process) {
+            continue;
+        }
+        if (TerminateProcess(process, 0)) {
+            std::cerr << "[dynamic_analysis] terminated lingering process PID " << pid << '\n';
+        }
+        CloseHandle(process);
+    }
+}
+
+} // namespace
+#endif
 
 int dynamic_analysis(const std::string& directory, const std::string& binary_name) {
     HostOS os = detect_host_os();

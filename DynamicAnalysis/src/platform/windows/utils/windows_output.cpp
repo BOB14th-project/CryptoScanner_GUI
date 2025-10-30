@@ -120,7 +120,6 @@ void ndjson_log_key_event(const char* surface,
         off += 8;
         hex_append(line, sizeof(line), &off, key, keylen);
         if (off < sizeof(line)) line[off++] = '"';
-        off += _snprintf_s(line + off, sizeof(line) - off, _TRUNCATE, ",\"keylen\":%d", keylen);
     }
     if (iv && ivlen > 0) {
         memcpy(line + off, ",\"iv\":\"", 7);
@@ -134,6 +133,14 @@ void ndjson_log_key_event(const char* surface,
         hex_append(line, sizeof(line), &off, tag, taglen);
         if (off < sizeof(line)) line[off++] = '"';
     }
+
+    int safe_keylen = keylen > 0 ? keylen : 0;
+    int safe_ivlen = ivlen > 0 ? ivlen : 0;
+    int safe_taglen = taglen > 0 ? taglen : 0;
+
+    off += _snprintf_s(line + off, sizeof(line) - off, _TRUNCATE, ",\"keylen\":%d", safe_keylen);
+    off += _snprintf_s(line + off, sizeof(line) - off, _TRUNCATE, ",\"ivlen\":%d", safe_ivlen);
+    off += _snprintf_s(line + off, sizeof(line) - off, _TRUNCATE, ",\"taglen\":%d", safe_taglen);
 
     if (off < sizeof(line)) line[off++] = '}';
     if (off < sizeof(line)) line[off++] = '\n';
