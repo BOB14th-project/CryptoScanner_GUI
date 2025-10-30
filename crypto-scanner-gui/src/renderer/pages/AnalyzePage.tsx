@@ -136,15 +136,17 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
       const rows: string[][] = [baseRow];
 
       if (detection.detectionMethod === 'dynamic' || detection.detectionMethod === 'static+dynamic') {
-        const appendDynamicRow = (label: string, value?: string) => {
-          if (!value) return;
+        const appendDynamicRow = (label: string, value?: string | number) => {
+          if (value === undefined || value === null) return;
+          const display = typeof value === 'number' ? value.toString() : value;
+          if (display === '') return;
 
           rows.push([
             detection.filePath || '',
             detection.algorithm || '',
             'dynamic',
             detection.severity || '',
-            `${label}: ${value}`,
+            `${label}: ${display}`,
             (detection.offset ?? 0).toString(),
             'dynamic'
           ]);
@@ -152,8 +154,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
 
         appendDynamicRow('Dynamic API', detection.dynamicMatchString || detection.dynamicApi || detection.matchString);
         appendDynamicRow('Dynamic Key', detection.dynamicKey);
+        appendDynamicRow('Dynamic Key Length', detection.dynamicKeyLength ?? 0);
         appendDynamicRow('Dynamic IV', detection.dynamicIv);
+        appendDynamicRow('Dynamic IV Length', detection.dynamicIvLength ?? 0);
         appendDynamicRow('Dynamic Tag', detection.dynamicTag);
+        appendDynamicRow('Dynamic Tag Length', detection.dynamicTagLength ?? 0);
       }
 
       return rows;
@@ -644,11 +649,20 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                         {method === 'dynamic' && detection.dynamicKey && (
                           <div><strong>Dynamic Key:</strong> {highlightText(detection.dynamicKey, searchQuery)}</div>
                         )}
+                        {method === 'dynamic' && detection.dynamicKeyLength !== undefined && (
+                          <div><strong>Dynamic Key Length:</strong> {highlightText(detection.dynamicKeyLength.toString(), searchQuery)}</div>
+                        )}
                         {method === 'dynamic' && detection.dynamicIv && (
                           <div><strong>Dynamic IV:</strong> {highlightText(detection.dynamicIv, searchQuery)}</div>
                         )}
+                        {method === 'dynamic' && detection.dynamicIvLength !== undefined && (
+                          <div><strong>Dynamic IV Length:</strong> {highlightText(detection.dynamicIvLength.toString(), searchQuery)}</div>
+                        )}
                         {method === 'dynamic' && detection.dynamicTag && (
                           <div><strong>Dynamic Tag:</strong> {highlightText(detection.dynamicTag, searchQuery)}</div>
+                        )}
+                        {method === 'dynamic' && detection.dynamicTagLength !== undefined && (
+                          <div><strong>Dynamic Tag Length:</strong> {highlightText(detection.dynamicTagLength.toString(), searchQuery)}</div>
                         )}
                       </div>
                     );

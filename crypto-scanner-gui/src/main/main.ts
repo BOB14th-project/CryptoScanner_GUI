@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import * as https from 'https';
 import * as fs from 'fs';
+import { exec as sudoPromptExec } from 'sudo-prompt';
 
 console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
 
@@ -148,6 +149,9 @@ async function uploadFilesToAPI(
   });
 }
 
+// Limit inline uploads to avoid exhausting the Electron main-process heap when handling large dump files.
+const MAX_INLINE_UPLOAD_BYTES = 32 * 1024 * 1024; // 32 MB
+
 let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
 let dynamicAnalysisProcess: ChildProcess | null = null;
@@ -156,6 +160,23 @@ let sudoPassword: string | null = null; // Store password for SUDO_ASKPASS
 
 // Check if running with admin privileges (check if sudo cached)
 async function checkAdminMode(): Promise<boolean> {
+  if (process.platform === 'win32') {
+    return new Promise((resolve) => {
+      const { exec } = require('child_process');
+      exec(
+        'powershell.exe -NoProfile -Command "[bool]([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"',
+        { windowsHide: true },
+        (error: any, stdout: string) => {
+          if (error) {
+            resolve(false);
+            return;
+          }
+          resolve(stdout.trim().toLowerCase() === 'true');
+        }
+      );
+    });
+  }
+
   // Only supported on macOS and Linux
   if (process.platform !== 'darwin' && process.platform !== 'linux') return false;
 
@@ -172,6 +193,30 @@ let sudoKeepAliveInterval: NodeJS.Timeout | null = null;
 
 // Request admin privileges using GUI password prompt
 async function requestAdminPrivileges(): Promise<boolean> {
+  if (process.platform === 'win32') {
+    if (await checkAdminMode()) {
+      console.log('[Admin] Windows process already elevated');
+      return true;
+    }
+
+    return new Promise((resolve) => {
+      const command = 'powershell.exe -NoProfile -Command "Write-Output CryptoScannerAdmin"';
+      sudoPromptExec(
+        command,
+        { name: 'CryptoScanner' },
+        (error) => {
+          if (error) {
+            console.error('Failed to obtain Windows admin privileges:', error);
+            resolve(false);
+          } else {
+            console.log('[Admin] Windows admin privileges granted');
+            resolve(true);
+          }
+        }
+      );
+    });
+  }
+
   // Only supported on macOS and Linux
   if (process.platform !== 'darwin' && process.platform !== 'linux') return false;
 
@@ -1896,13 +1941,17 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                     }
 
                     if (fileResultDir && fs.existsSync(fileResultDir)) {
-                      // bin과 asm 파일 찾기
+                      // Locate bin/asm files
                       const files = fs.readdirSync(fileResultDir);
 
                       let asmFileBuffer: Buffer | undefined;
                       let binFileBuffer: Buffer | undefined;
                       let asmFileName: string | undefined;
                       let binFileName: string | undefined;
+                      let asmOriginalSize = 0;
+                      let binOriginalSize = 0;
+                      let asmWasTruncated = false;
+                      let binWasTruncated = false;
 
                       for (const file of files) {
                         const fullPath = path.join(fileResultDir, file);
@@ -1911,46 +1960,165 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                         if (stat.isFile()) {
                           const ext = path.extname(file).toLowerCase();
 
-                          // .asm 파일 읽기
+                          // Read .asm file
                           if (ext === '.asm') {
                             try {
-                              asmFileBuffer = fs.readFileSync(fullPath);
-                              asmFileName = file;
-                              console.log(`Read ASM file: ${file} (${asmFileBuffer.length} bytes)`);
+                              asmOriginalSize = stat.size;
+                              if (stat.size > MAX_INLINE_UPLOAD_BYTES) {
+                                const fd = fs.openSync(fullPath, 'r');
+                                try {
+                                  const bytesToRead = Math.min(MAX_INLINE_UPLOAD_BYTES, Number(stat.size));
+                                  const limitedBuffer = Buffer.allocUnsafe(bytesToRead);
+                                  const bytesRead = fs.readSync(fd, limitedBuffer, 0, bytesToRead, 0);
+                                  asmFileBuffer = limitedBuffer.subarray(0, bytesRead);
+                                  asmFileName = `${path.basename(file, ext)}_partial${ext}`;
+                                  asmWasTruncated = true;
+                                  console.warn(`ASM file ${file} is ${stat.size} bytes; uploading first ${bytesRead} bytes only to avoid memory exhaustion`);
+                                } finally {
+                                  fs.closeSync(fd);
+                                }
+                              } else {
+                                asmFileBuffer = fs.readFileSync(fullPath);
+                                asmFileName = file;
+                              }
+
+                              if (asmFileBuffer && asmFileName) {
+                                const sizeInfo = asmWasTruncated
+                                  ? `${asmFileBuffer.length} bytes of ${stat.size}`
+                                  : `${asmFileBuffer.length} bytes`;
+                                console.log(`Read ASM file: ${asmFileName} (${sizeInfo})`);
+                              }
                             } catch (asmError) {
                               console.error(`Error reading ASM file ${file}:`, asmError);
                             }
                           }
 
-                          // .bin 파일 읽기
+                          // Read .bin file
                           else if (ext === '.bin') {
                             try {
-                              binFileBuffer = fs.readFileSync(fullPath);
-                              binFileName = file;
-                              console.log(`Read BIN file: ${file} (${binFileBuffer.length} bytes)`);
+                              binOriginalSize = stat.size;
+                              if (stat.size > MAX_INLINE_UPLOAD_BYTES) {
+                                const fd = fs.openSync(fullPath, 'r');
+                                try {
+                                  const bytesToRead = Math.min(MAX_INLINE_UPLOAD_BYTES, Number(stat.size));
+                                  const limitedBuffer = Buffer.allocUnsafe(bytesToRead);
+                                  const bytesRead = fs.readSync(fd, limitedBuffer, 0, bytesToRead, 0);
+                                  binFileBuffer = limitedBuffer.subarray(0, bytesRead);
+                                  binFileName = `${path.basename(file, ext)}_partial${ext}`;
+                                  binWasTruncated = true;
+                                  console.warn(`BIN file ${file} is ${stat.size} bytes; uploading first ${bytesRead} bytes only to avoid memory exhaustion`);
+                                } finally {
+                                  fs.closeSync(fd);
+                                }
+                              } else {
+                                binFileBuffer = fs.readFileSync(fullPath);
+                                binFileName = file;
+                              }
+
+                              if (binFileBuffer && binFileName) {
+                                const sizeInfo = binWasTruncated
+                                  ? `${binFileBuffer.length} bytes of ${stat.size}`
+                                  : `${binFileBuffer.length} bytes`;
+                                console.log(`Read BIN file: ${binFileName} (${sizeInfo})`);
+                              }
                             } catch (binError) {
                               console.error(`Error reading BIN file ${file}:`, binError);
                             }
                           }
                         }
-                        // chunks 폴더가 있는 경우 (큰 파일이 분할된 경우)
+                        // Handle chunk directories (e.g., when targets are split)
                         else if (stat.isDirectory() && file.endsWith('.chunks')) {
                           try {
                             const chunkFiles = fs.readdirSync(fullPath);
-                            let combinedAsm = Buffer.alloc(0);
-
-                            // .asm 파일들을 정렬하여 합치기
                             const asmFiles = chunkFiles.filter(f => f.endsWith('.asm')).sort();
-                            for (const asmFile of asmFiles) {
-                              const asmPath = path.join(fullPath, asmFile);
-                              const asmContent = fs.readFileSync(asmPath);
-                              combinedAsm = Buffer.concat([combinedAsm, Buffer.from(`\n\n--- ${asmFile} ---\n\n`), asmContent]);
+
+                            if (asmFiles.length === 0) {
+                              continue;
                             }
 
-                            if (combinedAsm.length > 0) {
-                              asmFileBuffer = combinedAsm;
-                              asmFileName = `${file.replace('.chunks', '')}_combined.asm`;
-                              console.log(`Read combined ASM chunks: ${asmFiles.length} files (${asmFileBuffer.length} bytes)`);
+                            const asmBuffers: Buffer[] = [];
+                            let collectedBytes = 0;
+                            let totalChunkBytes = 0;
+                            let truncated = false;
+
+                            for (const asmFile of asmFiles) {
+                              const asmPath = path.join(fullPath, asmFile);
+                              let chunkStat: fs.Stats;
+                              try {
+                                chunkStat = fs.statSync(asmPath);
+                              } catch (chunkStatErr) {
+                                console.error(`Error stating ASM chunk ${asmFile}:`, chunkStatErr);
+                                continue;
+                              }
+
+                              totalChunkBytes += chunkStat.size;
+
+                              const header = Buffer.from(`
+
+--- ${asmFile} ---
+
+`);
+                              if (collectedBytes + header.length > MAX_INLINE_UPLOAD_BYTES) {
+                                truncated = true;
+                                break;
+                              }
+                              asmBuffers.push(header);
+                              collectedBytes += header.length;
+
+                              if (collectedBytes >= MAX_INLINE_UPLOAD_BYTES) {
+                                truncated = true;
+                                break;
+                              }
+
+                              const remaining = MAX_INLINE_UPLOAD_BYTES - collectedBytes;
+                              if (remaining <= 0) {
+                                truncated = true;
+                                break;
+                              }
+
+                              const bytesToRead = Math.min(remaining, chunkStat.size);
+                              if (bytesToRead <= 0) {
+                                truncated = true;
+                                break;
+                              }
+
+                              const fd = fs.openSync(asmPath, 'r');
+                              try {
+                                const chunkBuffer = Buffer.allocUnsafe(bytesToRead);
+                                const bytesRead = fs.readSync(fd, chunkBuffer, 0, bytesToRead, 0);
+                                if (bytesRead > 0) {
+                                  asmBuffers.push(chunkBuffer.subarray(0, bytesRead));
+                                  collectedBytes += bytesRead;
+                                  if (bytesRead < chunkStat.size) {
+                                    truncated = true;
+                                    break;
+                                  }
+                                }
+                              } finally {
+                                fs.closeSync(fd);
+                              }
+
+                              if (collectedBytes >= MAX_INLINE_UPLOAD_BYTES) {
+                                truncated = true;
+                                break;
+                              }
+                            }
+
+                            if (asmBuffers.length > 0) {
+                              asmFileBuffer = Buffer.concat(asmBuffers, collectedBytes);
+                              const baseName = file.replace('.chunks', '');
+                              asmFileName = truncated
+                                ? `${baseName}_combined_partial.asm`
+                                : `${baseName}_combined.asm`;
+                              asmOriginalSize = totalChunkBytes;
+                              asmWasTruncated = truncated;
+                              const sizeInfo = truncated
+                                ? `${asmFileBuffer.length} bytes of ${totalChunkBytes}`
+                                : `${asmFileBuffer.length} bytes`;
+                              console.log(`Read combined ASM chunks: ${asmFiles.length} files (${sizeInfo})`);
+                              if (truncated) {
+                                console.warn(`Truncated ASM chunk aggregate to ${asmFileBuffer.length} bytes (limit ${MAX_INLINE_UPLOAD_BYTES})`);
+                              }
                             }
                           } catch (chunkError) {
                             console.error(`Error processing chunks directory ${file}:`, chunkError);
@@ -1958,10 +2126,10 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                         }
                       }
 
-                      // 파일 저장 (Base64 인코딩 방식)
+                      // Save extracted files (Base64 encoding with size cap)
                       if (asmFileBuffer || binFileBuffer) {
                         try {
-                          // ASM 파일 저장 (File_text 필드에)
+                          // ASM file payload (File_text field)
                           if (asmFileBuffer && asmFileName) {
                             const asmBase64 = asmFileBuffer.toString('base64');
                             await callAPI(`/files/${fileId}/llm/`, 'POST', {
@@ -1969,10 +2137,14 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                               Scan_id: scanId,
                               File_text: `[ASM_FILE:${asmFileName}]${asmBase64}`,
                             });
-                            console.log(`Saved ASM file: ${asmFileName} (${asmFileBuffer.length} bytes)`);
+                            if (asmWasTruncated) {
+                              console.warn(`Saved partial ASM file ${asmFileName} (${asmFileBuffer.length} of ${asmOriginalSize} bytes)`);
+                            } else {
+                              console.log(`Saved ASM file: ${asmFileName} (${asmFileBuffer.length} bytes)`);
+                            }
                           }
 
-                          // BIN 파일 저장 (Code 필드에)
+                          // BIN file payload (Code field)
                           if (binFileBuffer && binFileName) {
                             const binBase64 = binFileBuffer.toString('base64');
                             await callAPI(`/files/${fileId}/llm_code/`, 'POST', {
@@ -1980,10 +2152,17 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                               Scan_id: scanId,
                               Code: `[BIN_FILE:${binFileName}]${binBase64}`,
                             });
-                            console.log(`Saved BIN file: ${binFileName} (${binFileBuffer.length} bytes)`);
+                            if (binWasTruncated) {
+                              console.warn(`Saved partial BIN file ${binFileName} (${binFileBuffer.length} of ${binOriginalSize} bytes)`);
+                            } else {
+                              console.log(`Saved BIN file: ${binFileName} (${binFileBuffer.length} bytes)`);
+                            }
                           }
                         } catch (saveError) {
                           console.error(`Error saving files for file ID ${fileId}:`, saveError);
+                        } finally {
+                          asmFileBuffer = undefined;
+                          binFileBuffer = undefined;
                         }
                       }
                     } else {
