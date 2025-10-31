@@ -1,7 +1,7 @@
 # 🛡️ CryptoScanner: Non-PQC Detection Tool
 ![Platform](https://img.shields.io/badge/Platform-MacOS(ARM)-FF0000?style=flat)
 ![Platform](https://img.shields.io/badge/Platform-Linux(AMD/ARM)-FFD700?style=flat)
-![Platform](https://img.shields.io/badge/Platform-Windows(AMD/ARM)-0078D6?style=flat)
+![Platform](https://img.shields.io/badge/Platform-Windows(AMD)-0078D6?style=flat)
 <br />
 
 **CryptoScanner**은 실행파일, 소스코드, 키 / 인증서를 위주로 양자내성암호(PQC)로의 전환이 필요한 암호화 알고리즘을 탐지하고 분석하는 강력한 도구입니다.
