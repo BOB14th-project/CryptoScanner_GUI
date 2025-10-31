@@ -1,23 +1,40 @@
+# 🛡️ CryptoScanner: Non-PQC Detection Tool
+![Platform](https://img.shields.io/badge/Platform-MacOS(ARM)-FF0000?style=flat)
+![Platform](https://img.shields.io/badge/Platform-Linux(AMD/ARM)-FFD700?style=flat)
+![Platform](https://img.shields.io/badge/Platform-Windows(AMD/ARM)-0078D6?style=flat)
+<br />
+
+**CryptoScanner**은 실행파일, 소스코드, 키 / 인증서를 위주로 양자내성암호(PQC)로의 전환이 필요한 암호화 알고리즘을 탐지하고 분석하는 강력한 도구입니다.
+
+<br />
+
 # 📂 프로그램 구조
 
 ```bash
 CryptoScanner_GUI/
-├── CryptoScanner/           # C++ 백엔드 스캐너
+├── CryptoScanner/           # C++ 정적 분석 백엔드
+│   └── third_party/         # tree-sitter, miniz 등 외부 라이브러리
 │
-└── crypto-scanner-gui/      # React + Electron GUI
-    └── src/
-        ├── main/            # Electron 메인 프로세스
-        │   ├── main.ts      # 메인 프로세스 로직
-        │   └── preload.ts   # 프리로드 스크립트
-        └── renderer/        # React 렌더러 프로세스
-            ├── assets/      # 페이지 컴포넌트들
-            │   ├── fonts/   # SF Pro 폰트
-            |   └── images/  # 배경 이미지
-            ├── components/  # 공통 컴포넌트들
-            ├── hooks/       # 빈 폴더(대비용)
-            ├── pages/       # 페이지 컴포넌트들
-            ├── types/       # TypeScript 타입 정의
-            └── utils/       # 스토리지
+├── DynamicAnalysis/         # C++ 동적 분석 백엔드
+│   ├── include/             # 공통 헤더 파일
+│   ├── src/                 # 플랫폼별(MacOS, Linux, Windows) 소스 코드
+│   └── scripts/             # 동적 분석 테스트 및 빌드 스크립트 파일
+│
+├── crypto-scanner-gui/      # React + Electron 프론트엔드
+│   ├── scripts/             # 빌드 시 백엔드 파일을 복사하는 스크립트
+│   └── src/
+│       ├── main/            # Electron 메인 프로세스
+│       │   ├── main.ts      # 메인 프로세스 로직
+│       │   ├── preload.ts   # 프리로드 스크립트
+│       │   └── (backend)    # 빌드된 백엔드 실행 파일
+│       └── renderer/        # React 렌더 프로세스
+│           ├── assets/      # 폰트, 이미지 파일
+│           ├── components/  # 공통 UI 컴포넌트
+│           ├── pages/       # 화면별 페이지 컴포넌트
+│           ├── types/       # TypeScript 타입 정의
+│           └── utils/       # 유틸리티 파일
+│
+└── mac-arm64 / linux-arm, linux-amd / win-amd  # 빌드 후 생성되는 CryptoScanner 실행파일
 ```
 
 <br />
@@ -259,3 +276,11 @@ open CryptoScanner.app
 - 실시간 스캔 진행률 표시
 - 현재 스캔 중인 파일명 표시
 - 진행률 바 및 시간 정보 (경과/예상 시간)
+
+<br />
+
+# 🪪 라이선스
+![License](https://img.shields.io/badge/License-MIT-black.svg)
+<br />
+
+이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
