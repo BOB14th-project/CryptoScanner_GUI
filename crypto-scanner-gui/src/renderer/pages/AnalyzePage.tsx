@@ -973,7 +973,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             justifyContent: 'center',
             marginRight: '15px'
           }}>
-            <FaExclamationTriangle size={40} color="#FFFFFF" />
+            <FaExclamationTriangle size={32} color="#FFFFFF" />
           </div>
           <div>
             <div style={{
