@@ -1,5 +1,6 @@
 import React from 'react';
 import { PageType } from '../types';
+import { FaChevronLeft, FaHome, FaClock, FaSearch, FaHdd } from 'react-icons/fa';
 
 interface MainPageProps {
   onNavigate: (page: PageType) => void;
@@ -55,10 +56,7 @@ const MainPage: React.FC<MainPageProps> = ({ onNavigate, onGoBack }) => {
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '27px',
-            color: '#FFFFFF'
-          }}>‹</span>
+          <FaChevronLeft size={20} color="#FFFFFF" />
         </button>
 
         {/* Home Button */}
@@ -80,10 +78,7 @@ const MainPage: React.FC<MainPageProps> = ({ onNavigate, onGoBack }) => {
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '22px',
-            color: '#FFFFFF'
-          }}>⌂</span>
+          <FaHome size={18} color="#FFFFFF" />
         </button>
 
         {/* Crypto Scanner 상단 */}
@@ -151,7 +146,7 @@ const MainPage: React.FC<MainPageProps> = ({ onNavigate, onGoBack }) => {
             justifyContent: 'center',
             fontSize: 'clamp(30px, 4vw, 40px)',
             marginBottom: 'clamp(15px, 2vh, 20px)'
-          }}>🕐</div>
+          }}><FaClock size={40} color="#FFFFFF" /></div>
 
           {/* RESULT */}
           <h2 style={{
@@ -234,7 +229,7 @@ const MainPage: React.FC<MainPageProps> = ({ onNavigate, onGoBack }) => {
             justifyContent: 'center',
             fontSize: 'clamp(30px, 4vw, 40px)',
             marginBottom: 'clamp(15px, 2vh, 20px)'
-          }}>🔍</div>
+          }}><FaSearch size={40} color="#FFFFFF" /></div>
 
           {/* QUICK SCAN */}
           <h2 style={{
@@ -317,7 +312,7 @@ const MainPage: React.FC<MainPageProps> = ({ onNavigate, onGoBack }) => {
             justifyContent: 'center',
             fontSize: 'clamp(30px, 4vw, 40px)',
             marginBottom: 'clamp(15px, 2vh, 20px)'
-          }}>💾</div>
+          }}><FaHdd size={40} color="#FFFFFF" /></div>
 
           {/* FULL SCAN */}
           <h2 style={{

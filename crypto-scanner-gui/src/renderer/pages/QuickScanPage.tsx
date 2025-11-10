@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PageType, ScanResult, ScanType } from '../types';
 import { generateId } from '../utils/storage';
 import Header from '../components/Header';
+import { FaChevronLeft, FaHome, FaSearch, FaCheck } from 'react-icons/fa';
 
 interface QuickScanPageProps {
   onNavigate: (page: PageType) => void;
@@ -128,10 +129,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '27px',
-            color: '#FFFFFF'
-          }}>‹</span>
+          <FaChevronLeft size={20} color="#FFFFFF" />
         </button>
 
         {/* Home Button */}
@@ -153,10 +151,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '22px',
-            color: '#FFFFFF'
-          }}>⌂</span>
+          <FaHome size={18} color="#FFFFFF" />
         </button>
 
         {/* QUICK SCAN Header */}
@@ -245,10 +240,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <span style={{
-                  fontSize: '11px',
-                  color: '#404040'
-                }}>✓</span>
+                <FaCheck size={11} color="#404040" />
               </div>
             )}
           </div>
@@ -296,10 +288,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <span style={{
-                  fontSize: '11px',
-                  color: '#404040'
-                }}>✓</span>
+                <FaCheck size={11} color="#404040" />
               </div>
             )}
           </div>
@@ -332,7 +321,7 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
             justifyContent: 'center',
             fontSize: 'clamp(24px, 3vw, 32px)'
           }}>
-            🔍
+            <FaSearch size={32} color="#FFFFFF" />
           </div>
 
           {/* Title */}

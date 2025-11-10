@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { PageType, ScanResult, TabType, Detection } from '../types';
+import { FaChevronLeft, FaHome, FaSearch, FaFileAlt, FaExclamationTriangle } from 'react-icons/fa';
+import { LuShieldAlert } from "react-icons/lu";
 
 interface AnalyzePageProps {
   result: ScanResult;
@@ -540,7 +542,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                   color: 'rgba(255, 255, 255, 0.5)',
                   fontSize: '16px'
                 }}>
-                  🔍
+                  <FaSearch />
                 </div>
               </div>
 
@@ -797,10 +799,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '27px',
-            color: '#FFFFFF'
-          }}>‹</span>
+          <FaChevronLeft size={20} color="#FFFFFF" />
         </button>
 
         {/* Home Button */}
@@ -822,10 +821,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '22px',
-            color: '#FFFFFF'
-          }}>⌂</span>
+          <FaHome size={18} color="#FFFFFF" />
         </button>
 
         {/* RESULT Header */}
@@ -889,7 +885,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             justifyContent: 'center',
             marginRight: '15px'
           }}>
-            <span style={{ fontSize: '32px' }}>🛡️</span>
+            <LuShieldAlert size={40} color="#FFFFFF" />
           </div>
           <div>
             <div style={{
@@ -933,7 +929,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             justifyContent: 'center',
             marginRight: '15px'
           }}>
-            <span style={{ fontSize: '32px' }}>📄</span>
+            <FaFileAlt size={32} color="#FFFFFF" />
           </div>
           <div>
             <div style={{
@@ -977,7 +973,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             justifyContent: 'center',
             marginRight: '15px'
           }}>
-            <span style={{ fontSize: '32px' }}>⚠️</span>
+            <FaExclamationTriangle size={32} color="#FFFFFF" />
           </div>
           <div>
             <div style={{
