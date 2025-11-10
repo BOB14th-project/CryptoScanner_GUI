@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { PageType, ScanResult } from '../types';
 import { formatDate, formatTime } from '../utils/storage';
 import Header from '../components/Header';
+import { FaChevronLeft, FaHome, FaSearch } from 'react-icons/fa';
 
 interface ResultPageProps {
   scanResults: ScanResult[];
@@ -91,10 +92,7 @@ const ResultPage: React.FC<ResultPageProps> = ({
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '27px',
-            color: '#FFFFFF'
-          }}>‹</span>
+          <FaChevronLeft size={20} color="#FFFFFF" />
         </button>
 
         {/* Home Button */}
@@ -116,10 +114,7 @@ const ResultPage: React.FC<ResultPageProps> = ({
             flexShrink: 0
           }}
         >
-          <span style={{
-            fontSize: '22px',
-            color: '#FFFFFF'
-          }}>⌂</span>
+          <FaHome size={18} color="#FFFFFF" />
         </button>
 
         {/* RESULT Header */}
@@ -310,7 +305,7 @@ const ResultPage: React.FC<ResultPageProps> = ({
                     justifyContent: 'center',
                     fontSize: 'clamp(24px, 3vw, 32px)'
                   }}>
-                    🔍
+                    <FaSearch size={40} color="#FFFFFF" />
                   </div>
 
                   {/* Title */}
