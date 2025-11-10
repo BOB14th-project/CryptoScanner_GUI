@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PageType, ScanProgress, ScanType } from '../types';
 import { formatDuration } from '../utils/storage';
 import Header from '../components/Header';
+import { FaSearch } from "react-icons/fa";
 
 interface LoadingPageProps {
   progress?: ScanProgress;
@@ -220,7 +221,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
               justifyContent: 'center',
               fontSize: 'clamp(24px, 3vw, 32px)'
             }}>
-              🔍
+              <FaSearch size={32} color="#FFFFFF" />
             </div>
 
             <div style={{
