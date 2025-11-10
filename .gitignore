@@ -4,9 +4,13 @@
 # crypto-scanner-gui
 crypto-scanner-gui/dist
 crypto-scanner-gui/node_modules
+crypto-scanner-gui/package-lock.json
 crypto-scanner-gui/test_localStorage.js
 crypto-scanner-gui/src/main/*.exe
 crypto-scanner-gui/src/main/*.dll
+crypto-scanner-gui/src/main/*.so
+crypto-scanner-gui/src/main/CryptoScannerCLI
+crypto-scanner-gui/src/main/dynamic_analysis_cli
 
 # CryptoScanner
 CryptoScanner/*.o
