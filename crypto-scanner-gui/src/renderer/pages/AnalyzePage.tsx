@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageType, ScanResult, TabType, Detection } from '../types';
 import { FaChevronLeft, FaHome, FaSearch, FaFileAlt, FaExclamationTriangle } from 'react-icons/fa';
 import { LuShieldAlert } from "react-icons/lu";
@@ -8,9 +8,58 @@ interface AnalyzePageProps {
   onNavigate: (page: PageType) => void;
 }
 
+interface AlgorithmInfo {
+  name: string;
+  description?: string;
+}
+
 const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [algorithmDescriptions, setAlgorithmDescriptions] = useState<Map<string, string>>(new Map());
+  const [hoveredAlgo, setHoveredAlgo] = useState<string | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+
+  // Load patterns.json to get algorithm descriptions
+  useEffect(() => {
+    const loadAlgorithmDescriptions = async () => {
+      try {
+        console.log('[AnalyzePage] Loading patterns.json...');
+        const response = await fetch('patterns.json');
+        console.log('[AnalyzePage] Fetch response:', response.status);
+        const data = await response.json();
+        console.log('[AnalyzePage] Patterns data loaded:', data);
+        const descMap = new Map<string, string>();
+
+        // Process regex patterns
+        if (data.regex && Array.isArray(data.regex)) {
+          data.regex.forEach((pattern: AlgorithmInfo) => {
+            if (pattern.name && pattern.description) {
+              descMap.set(pattern.name, pattern.description);
+              console.log(`[AnalyzePage] Added description for ${pattern.name}:`, pattern.description);
+            }
+          });
+        }
+
+        // Process bytes patterns (OID DER, CurveParam, Prime, etc.)
+        if (data.bytes && Array.isArray(data.bytes)) {
+          data.bytes.forEach((pattern: AlgorithmInfo) => {
+            if (pattern.name && pattern.description) {
+              descMap.set(pattern.name, pattern.description);
+              console.log(`[AnalyzePage] Added bytes description for ${pattern.name}:`, pattern.description);
+            }
+          });
+        }
+
+        console.log('[AnalyzePage] Total descriptions loaded:', descMap.size);
+        setAlgorithmDescriptions(descMap);
+      } catch (error) {
+        console.error('[AnalyzePage] Failed to load patterns.json:', error);
+      }
+    };
+
+    loadAlgorithmDescriptions();
+  }, []);
 
   // Parse CSV data to extract statistics
   const parseResultData = () => {
@@ -1123,7 +1172,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             position: 'relative',
             display: 'flex',
             alignItems: 'flex-start',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            overflow: 'visible'
           }}>
             <div style={{
               display: 'grid',
@@ -1134,36 +1184,66 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
               width: '100%',
               maxHeight: '100%',
               overflowY: 'auto',
-              paddingRight: '5px'
+              paddingRight: '5px',
+              position: 'relative'
             }}>
-              {algorithmData.map((algo, index) => (
-                <div key={algo.name} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                  background: 'rgba(255, 255, 255, 0.5)',
-                  borderRadius: '18px',
-                  gap: '12px',
-                  minWidth: 'max-content',
-                  width: '100%',
-                  justifyContent: 'flex-start'
-                }}>
-                  <div style={{
-                    width: '20px',
-                    height: '20px',
-                    background: algo.color,
-                    borderRadius: '999px',
-                    flexShrink: 0
-                  }} />
-                  <span style={{
-                    fontFamily: 'SF Pro Rounded',
-                    fontWeight: 700,
-                    fontSize: '14px',
-                    color: '#000000',
-                    whiteSpace: 'nowrap'
-                  }}>{algo.name}</span>
-                </div>
-              ))}
+              {algorithmData.map((algo, index) => {
+                const description = algorithmDescriptions.get(algo.name);
+                if (index === 0) {
+                  console.log(`[AnalyzePage] First algo: ${algo.name}, has description:`, !!description, description);
+                  console.log('[AnalyzePage] algorithmDescriptions size:', algorithmDescriptions.size);
+                }
+                return (
+                  <div
+                    key={algo.name}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '12px 16px',
+                      background: 'rgba(255, 255, 255, 0.5)',
+                      borderRadius: '18px',
+                      gap: '12px',
+                      minWidth: 'max-content',
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      cursor: description ? 'help' : 'default',
+                      position: 'relative',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      console.log(`[AnalyzePage] Mouse entered ${algo.name}, description:`, description);
+                      if (description) {
+                        setHoveredAlgo(algo.name);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setTooltipPosition({
+                          x: rect.left + rect.width / 2,
+                          y: rect.top - 10
+                        });
+                        console.log('[AnalyzePage] Set hovered algo and tooltip position');
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      console.log('[AnalyzePage] Mouse left');
+                      setHoveredAlgo(null);
+                    }}
+                  >
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      background: algo.color,
+                      borderRadius: '999px',
+                      flexShrink: 0
+                    }} />
+                    <span style={{
+                      fontFamily: 'SF Pro Rounded',
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      color: '#000000',
+                      whiteSpace: 'nowrap'
+                    }}>{algo.name}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1182,6 +1262,48 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
         </div>
       )}
       </div>
+
+      {/* Global Tooltip - rendered at component root level */}
+      {hoveredAlgo && (() => {
+        const hoveredDescription = algorithmDescriptions.get(hoveredAlgo);
+        console.log('[AnalyzePage] Rendering global tooltip:', hoveredAlgo, hoveredDescription, tooltipPosition);
+        return hoveredDescription ? (
+          <div style={{
+            position: 'fixed',
+            left: `${tooltipPosition.x}px`,
+            top: `${tooltipPosition.y}px`,
+            transform: 'translate(-50%, calc(-100% - 10px))',
+            background: 'rgba(0, 0, 0, 0.95)',
+            color: '#FFFFFF',
+            padding: '14px 18px',
+            borderRadius: '12px',
+            fontSize: '14px',
+            fontFamily: 'SF Pro',
+            lineHeight: '1.6',
+            maxWidth: '350px',
+            minWidth: '200px',
+            whiteSpace: 'normal',
+            wordBreak: 'keep-all',
+            boxShadow: '0px 12px 24px rgba(0, 0, 0, 0.5)',
+            zIndex: 999999,
+            pointerEvents: 'none',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}>
+            {hoveredDescription}
+            <div style={{
+              position: 'absolute',
+              bottom: '-8px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '0',
+              height: '0',
+              borderLeft: '8px solid transparent',
+              borderRight: '8px solid transparent',
+              borderTop: '8px solid rgba(0, 0, 0, 0.95)'
+            }} />
+          </div>
+        ) : null;
+      })()}
     </>
   );
 };
