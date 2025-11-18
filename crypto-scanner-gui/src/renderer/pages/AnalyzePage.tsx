@@ -19,6 +19,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
   const [algorithmDescriptions, setAlgorithmDescriptions] = useState<Map<string, string>>(new Map());
   const [hoveredAlgo, setHoveredAlgo] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
 
   // Load patterns.json to get algorithm descriptions
   useEffect(() => {
@@ -317,6 +318,40 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
 
   const generateCsvData = (result: ScanResult): string => {
     return buildCsvContent(result.detections);
+  };
+
+  const handleGenerateReport = async () => {
+    console.log('handleGenerateReport called');
+    console.log('window.electronAPI:', window.electronAPI);
+
+    if (!window.electronAPI?.generateReport) {
+      console.error('generateReport API not available');
+      alert('Report generation API not available');
+      return;
+    }
+
+    // Show loading modal immediately
+    setIsGeneratingReport(true);
+
+    // Small delay to ensure modal is rendered
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    try {
+      console.log('Calling generateReport with result:', result);
+      const reportResult = await window.electronAPI.generateReport(result);
+      console.log('Report generation result:', reportResult);
+
+      if (reportResult.success) {
+        alert(`보고서가 성공적으로 생성되었습니다!\n저장 위치: ${reportResult.path}`);
+      } else {
+        alert(`보고서 생성 실패: ${reportResult.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to generate report:', error);
+      alert(`보고서 생성 중 오류가 발생했습니다: ${error}`);
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   const CircleChart = () => {
@@ -788,10 +823,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
 
             {/* Report Download Button */}
             <button
-              onClick={() => {
-                console.log('Report download clicked');
-                // TODO: Implement report download functionality
-              }}
+              onClick={handleGenerateReport}
+              disabled={isGeneratingReport}
               style={{
                 display: 'flex',
                 flexDirection: 'row',
@@ -800,13 +833,16 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                 gap: '8px',
                 padding: '12px 24px',
                 height: '48px',
-                background: 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
+                background: isGeneratingReport
+                  ? 'rgba(128, 128, 128, 0.5)'
+                  : 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
                 backgroundBlendMode: 'normal, overlay',
                 boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
                 backdropFilter: 'blur(10px)',
                 borderRadius: '999px',
                 border: 'none',
-                cursor: 'pointer'
+                cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
+                opacity: isGeneratingReport ? 0.6 : 1
               }}
             >
               <FaDownload size={16} color="#FFFFFF" />
@@ -815,7 +851,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                 fontWeight: 600,
                 fontSize: '16px',
                 color: '#FFFFFF'
-              }}>Report Download</span>
+              }}>{isGeneratingReport ? 'Generating...' : 'Report Download'}</span>
             </button>
           </div>
         );
@@ -1262,10 +1298,8 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
 
                 {/* Report Download Button */}
                 <button
-                  onClick={() => {
-                    console.log('Report download clicked');
-                    // TODO: Implement report download functionality
-                  }}
+                  onClick={handleGenerateReport}
+                  disabled={isGeneratingReport}
                   style={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -1274,13 +1308,16 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                     gap: '8px',
                     padding: '10px 20px',
                     height: '44px',
-                    background: 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
+                    background: isGeneratingReport
+                      ? 'rgba(128, 128, 128, 0.5)'
+                      : 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
                     backgroundBlendMode: 'normal, overlay',
                     boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
                     backdropFilter: 'blur(10px)',
                     borderRadius: '999px',
                     border: 'none',
-                    cursor: 'pointer'
+                    cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingReport ? 0.6 : 1
                   }}
                 >
                   <FaDownload size={14} color="#FFFFFF" />
@@ -1290,7 +1327,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                     fontSize: '14px',
                     color: '#FFFFFF',
                     whiteSpace: 'nowrap'
-                  }}>Report Download</span>
+                  }}>{isGeneratingReport ? 'Generating...' : 'Report Download'}</span>
                 </button>
               </div>
             )}
@@ -1521,6 +1558,77 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
           </div>
         ) : null;
       })()}
+
+      {/* Loading Modal */}
+      {isGeneratingReport && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000000,
+          pointerEvents: 'all'
+        }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px',
+            padding: '40px 60px',
+            background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))',
+            borderRadius: '24px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0px 20px 40px rgba(0, 0, 0, 0.5)'
+          }}>
+            {/* Spinning Circle */}
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              border: '4px solid rgba(255, 255, 255, 0.2)',
+              borderTopColor: '#FFFFFF',
+              animation: 'spin 1s linear infinite'
+            }} />
+
+            {/* Loading Text */}
+            <div style={{
+              fontFamily: 'SF Pro Rounded',
+              fontWeight: 600,
+              fontSize: '20px',
+              color: '#FFFFFF',
+              textAlign: 'center'
+            }}>
+              Generating the LLM Report...
+            </div>
+
+            {/* Subtitle */}
+            <div style={{
+              fontFamily: 'SF Pro',
+              fontWeight: 400,
+              fontSize: '14px',
+              color: 'rgba(255, 255, 255, 0.7)',
+              textAlign: 'center',
+              maxWidth: '300px'
+            }}>
+              Please wait while we generate your report using AI
+            </div>
+          </div>
+
+          {/* CSS Animation */}
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
     </>
   );
 };

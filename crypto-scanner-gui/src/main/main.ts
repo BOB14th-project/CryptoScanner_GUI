@@ -4,8 +4,26 @@ import { spawn, ChildProcess } from 'child_process';
 import * as https from 'https';
 import * as fs from 'fs';
 import { exec as sudoPromptExec } from 'sudo-prompt';
+import { generateReport } from './reportGenerator';
+import * as dotenv from 'dotenv';
+
+// .env 파일 로드 (여러 경로 시도)
+const envPaths = [
+  path.join(__dirname, '../../.env'),           // crypto-scanner-gui/.env
+  path.join(__dirname, '../../../.env'),        // CryptoScanner_GUI/.env
+  path.join(process.cwd(), '.env'),             // 현재 작업 디렉토리
+];
+
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    console.log(`[ENV] Loading from: ${envPath}`);
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
+console.log('[ENV] GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'SET' : 'NOT SET');
 
 // FastAPI 서버 URL
 const API_BASE_URL = 'https://harper-abler-agape.ngrok-free.dev';
@@ -1757,6 +1775,9 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
               const scanId = scanResponse.Scan_id;
               console.log('Created scan with ID:', scanId);
 
+              // Map to store file path to database file ID
+              const dbFileIds: Record<string, number> = {};
+
               // OS별 result 폴더 경로 결정
               const getResultDirectory = (): string => {
                 const possiblePaths = [
@@ -1828,6 +1849,9 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                   });
                   const fileId = fileResponse.File_id;
                   console.log(`Created file with ID: ${fileId} for ${filePath}`);
+
+                  // Store the database file ID
+                  dbFileIds[filePath] = fileId;
 
                   // 3. 정적 및 동적 분석 결과 저장
                   console.log(`[DB Save] Processing ${fileDetections.length} detections for file ${fileId}`);
@@ -1912,7 +1936,198 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                     }
                   }
 
-                  // 4. bin/asm 파일 저장 (Base64 인코딩 방식)
+                  // 4. 소스 코드 또는 실행 파일 처리
+                  const fileExt = path.extname(filePath).toLowerCase();
+                  const sourceCodeExtensions = [
+                    '.c', '.cpp', '.cc', '.cxx', '.c++',
+                    '.h', '.hpp', '.hh', '.hxx', '.h++',
+                    '.java', '.py', '.js', '.ts', '.jsx', '.tsx',
+                    '.go', '.rs', '.swift', '.kt', '.kts',
+                    '.cs', '.rb', '.php', '.pl', '.sh',
+                    '.scala', '.clj', '.lua', '.r', '.m', '.mm'
+                  ];
+                  const isSourceCode = sourceCodeExtensions.includes(fileExt);
+
+                  // Case 1: 소스 코드 파일 - Code 필드에 저장
+                  if (isSourceCode) {
+                    try {
+                      console.log(`[Source Code] Processing source code file: ${filePath}`);
+
+                      const stats = fs.statSync(filePath);
+                      const MAX_SOURCE_SIZE = 50 * 1024 * 1024; // 50MB limit
+
+                      if (stats.size <= MAX_SOURCE_SIZE) {
+                        const sourceCode = fs.readFileSync(filePath, 'utf-8');
+
+                        // Save to DB - Code field
+                        try {
+                          const payload = {
+                            File_id: fileId,
+                            Scan_id: scanId,
+                            File_text: '', // Required field, but empty for source code
+                            Code: sourceCode,
+                          };
+                          console.log(`[Source Code] Sending payload to /files/${fileId}/llm_code/:`, JSON.stringify({
+                            File_id: payload.File_id,
+                            Scan_id: payload.Scan_id,
+                            Code_length: payload.Code.length,
+                            Code_preview: payload.Code.substring(0, 100)
+                          }));
+                          // Use llm_code endpoint instead of llm
+                          await callAPI(`/files/${fileId}/llm_code/`, 'POST', {
+                            File_id: fileId,
+                            Scan_id: scanId,
+                            Code: sourceCode,
+                          });
+                          console.log(`[Source Code] ✅ Saved source code to DB for file ${fileId} (${sourceCode.length} bytes)`);
+                        } catch (dbErr) {
+                          console.error(`[Source Code] ❌ Failed to save source code to DB:`, dbErr);
+                        }
+                      } else {
+                        // If file is too large, read first 50MB
+                        const fd = fs.openSync(filePath, 'r');
+                        const buffer = Buffer.alloc(MAX_SOURCE_SIZE);
+                        const bytesRead = fs.readSync(fd, buffer, 0, MAX_SOURCE_SIZE, 0);
+                        fs.closeSync(fd);
+
+                        const truncatedCode = `/* TRUNCATED - First ${bytesRead} bytes of ${stats.size} total */\n\n` +
+                                            buffer.toString('utf-8', 0, bytesRead);
+
+                        try {
+                          // Use llm_code endpoint
+                          await callAPI(`/files/${fileId}/llm_code/`, 'POST', {
+                            File_id: fileId,
+                            Scan_id: scanId,
+                            Code: truncatedCode,
+                          });
+                          console.warn(`[Source Code] ⚠️ Saved truncated source code to DB for file ${fileId} (${stats.size} -> ${bytesRead} bytes)`);
+                        } catch (dbErr) {
+                          console.error(`[Source Code] ❌ Failed to save truncated source code to DB:`, dbErr);
+                        }
+                      }
+                    } catch (sourceError) {
+                      console.error(`[Source Code] Error processing source code file ${filePath}:`, sourceError);
+                    }
+                  }
+                  // Case 2: Mac 환경 - 실행 파일 디스어셈블 생성 및 저장
+                  else if (process.platform === 'darwin') {
+                    try {
+                      // Check if file is executable
+                      const { execSync } = require('child_process');
+
+                      // Use 'file' command to check if it's an executable
+                      let isExecutable = false;
+                      try {
+                        const fileTypeOutput = execSync(`file "${filePath}"`, { encoding: 'utf-8', maxBuffer: 1024 * 1024 });
+                        console.log(`[Mac Disasm] File type check: ${fileTypeOutput.trim()}`);
+
+                        // Check if it's a Mach-O executable
+                        isExecutable = fileTypeOutput.includes('Mach-O') &&
+                                      (fileTypeOutput.includes('executable') ||
+                                       fileTypeOutput.includes('dynamically linked shared library') ||
+                                       fileTypeOutput.includes('universal binary'));
+                      } catch (fileCheckErr) {
+                        console.log(`[Mac Disasm] Could not check file type: ${fileCheckErr}`);
+                      }
+
+                      if (isExecutable) {
+                        console.log(`[Mac Disasm] Generating disassembly for: ${filePath}`);
+
+                        // Create temporary output file
+                        const tmpAsmPath = path.join('/tmp', `disasm_${fileId}_${Date.now()}.asm`);
+
+                        let disasmSuccess = false;
+                        let disasmCommand = '';
+
+                        // Try multiple disassembly tools in order of preference
+                        const disasmTools = [
+                          // 1. Try llvm-objdump (Homebrew)
+                          `/opt/homebrew/bin/llvm-objdump -d --no-show-raw-insn --print-imm-hex "${filePath}"`,
+                          // 2. Try system objdump
+                          `objdump -d "${filePath}"`,
+                          // 3. Try otool (macOS native)
+                          `otool -tV "${filePath}"`,
+                          // 4. Try llvm-objdump without path
+                          `llvm-objdump -d --no-show-raw-insn --print-imm-hex "${filePath}"`,
+                        ];
+
+                        for (const tool of disasmTools) {
+                          try {
+                            console.log(`[Mac Disasm] Trying: ${tool.split(' ')[0]}`);
+                            disasmCommand = `${tool} > "${tmpAsmPath}" 2>&1`;
+                            execSync(disasmCommand, {
+                              encoding: 'utf-8',
+                              maxBuffer: 100 * 1024 * 1024, // 100MB buffer
+                              timeout: 60000 // 60 second timeout
+                            });
+
+                            // Check if output file exists and has content
+                            if (fs.existsSync(tmpAsmPath)) {
+                              const stats = fs.statSync(tmpAsmPath);
+                              if (stats.size > 100) { // At least 100 bytes
+                                disasmSuccess = true;
+                                console.log(`[Mac Disasm] Successfully generated disassembly: ${stats.size} bytes`);
+                                break;
+                              } else {
+                                console.log(`[Mac Disasm] Output too small (${stats.size} bytes), trying next tool`);
+                              }
+                            }
+                          } catch (toolErr) {
+                            console.log(`[Mac Disasm] Tool failed, trying next...`);
+                            continue;
+                          }
+                        }
+
+                        if (disasmSuccess && fs.existsSync(tmpAsmPath)) {
+                          const stats = fs.statSync(tmpAsmPath);
+                          const MAX_ASM_SIZE = 50 * 1024 * 1024; // 50MB limit
+
+                          let asmContent = '';
+                          if (stats.size <= MAX_ASM_SIZE) {
+                            asmContent = fs.readFileSync(tmpAsmPath, 'utf-8');
+                          } else {
+                            // If too large, read first 50MB
+                            const fd = fs.openSync(tmpAsmPath, 'r');
+                            const buffer = Buffer.alloc(MAX_ASM_SIZE);
+                            const bytesRead = fs.readSync(fd, buffer, 0, MAX_ASM_SIZE, 0);
+                            fs.closeSync(fd);
+                            asmContent = `[TRUNCATED - First ${bytesRead} bytes of ${stats.size} total]\n\n` +
+                                        buffer.toString('utf-8', 0, bytesRead);
+                            console.warn(`[Mac Disasm] Truncated assembly from ${stats.size} to ${bytesRead} bytes`);
+                          }
+
+                          // Save to DB
+                          try {
+                            await callAPI(`/files/${fileId}/llm/`, 'POST', {
+                              File_id: fileId,
+                              Scan_id: scanId,
+                              File_text: asmContent,
+                              Code: '', // Required field, but empty for disassembly
+                            });
+                            console.log(`[Mac Disasm] ✅ Saved disassembly to DB for file ${fileId} (${asmContent.length} bytes)`);
+                          } catch (dbErr) {
+                            console.error(`[Mac Disasm] ❌ Failed to save disassembly to DB:`, dbErr);
+                          }
+
+                          // Clean up temp file
+                          try {
+                            fs.unlinkSync(tmpAsmPath);
+                            console.log(`[Mac Disasm] Cleaned up temp file: ${tmpAsmPath}`);
+                          } catch (cleanupErr) {
+                            console.warn(`[Mac Disasm] Could not clean up temp file:`, cleanupErr);
+                          }
+                        } else {
+                          console.warn(`[Mac Disasm] Failed to generate disassembly for ${filePath}`);
+                        }
+                      } else {
+                        console.log(`[Mac Disasm] File is not an executable, skipping disassembly: ${filePath}`);
+                      }
+                    } catch (macDisasmError) {
+                      console.error(`[Mac Disasm] Error processing ${filePath}:`, macDisasmError);
+                    }
+                  }
+
+                  // 5. bin/asm 파일 저장 (Base64 인코딩 방식) - 기존 result 폴더에서 읽기
                   try {
                     // 파일명 추출 (확장자 포함)
                     const fullFileName = path.basename(filePath);
@@ -2177,21 +2392,24 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
               }
 
               console.log('Successfully saved scan results to database');
+              return dbFileIds;
             } catch (dbError) {
               console.error('Error saving to database:', dbError);
               // 데이터베이스 저장 실패 시에도 스캔 결과는 반환
+              return {};
             }
           };
 
           // 데이터베이스 저장 (비동기로 실행하되 완료를 기다림)
-          await saveToDatabase();
+          const dbFileIds = await saveToDatabase();
 
           resolve({
             success: true,
             output,
             detections: mergedDetections,
             nonPqcCount: mergedDetections.length,
-            fileCount: new Set(mergedDetections.map(d => d.filePath)).size
+            fileCount: new Set(mergedDetections.map(d => d.filePath)).size,
+            dbFileIds: dbFileIds
           });
         } else {
           reject(new Error(errorOutput || 'Scan failed with code ' + code));
@@ -2246,4 +2464,44 @@ ipcMain.handle('save-csv', async (event, data) => {
     }
   }
   return { success: false, error: 'Save cancelled' };
+});
+
+// 보고서 생성 IPC 핸들러
+ipcMain.handle('generate-report', async (event, scanResult) => {
+  try {
+    console.log('[Report] Starting report generation...');
+    console.log('[Report] Scan result:', JSON.stringify(scanResult, null, 2).substring(0, 500));
+
+    // 저장 경로 선택 다이얼로그
+    const saveDialog = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: `CryptoScanner_Report_${scanResult.date}_${scanResult.time.replace(/:/g, '-')}.docx`,
+      filters: [
+        { name: 'Word Documents', extensions: ['docx'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+
+    if (saveDialog.canceled || !saveDialog.filePath) {
+      return { success: false, error: 'Save cancelled by user' };
+    }
+
+    console.log('[Report] Generating report to:', saveDialog.filePath);
+
+    // 보고서 생성
+    const reportPath = await generateReport(scanResult, saveDialog.filePath);
+
+    console.log('[Report] Report generated successfully:', reportPath);
+
+    return {
+      success: true,
+      path: reportPath,
+      message: '보고서가 성공적으로 생성되었습니다.'
+    };
+  } catch (error) {
+    console.error('[Report] Error generating report:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 });

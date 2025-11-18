@@ -50,7 +50,8 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
           nonPqcCount: scanResult.nonPqcCount || 0,
           fileCount: scanResult.fileCount || 0,
           riskLevel: scanResult.nonPqcCount > 100 ? 'High' : scanResult.nonPqcCount > 20 ? 'Medium' : 'Low',
-          detections: scanResult.detections || []
+          detections: scanResult.detections || [],
+          dbFileIds: scanResult.dbFileIds // Add database file IDs from scan result
         };
 
         onScanComplete(result);
