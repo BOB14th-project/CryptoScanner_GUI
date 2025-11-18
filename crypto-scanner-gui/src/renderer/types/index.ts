@@ -8,6 +8,8 @@ export interface ScanResult {
   fileCount: number;
   riskLevel: 'Low' | 'Medium' | 'High';
   detections: Detection[];
+  dbFileId?: number; // Database file ID from API
+  dbFileIds?: Record<string, number>; // Map of filePath to database file ID
 }
 
 export interface Detection {

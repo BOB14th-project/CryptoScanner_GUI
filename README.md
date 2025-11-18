@@ -234,6 +234,16 @@ open CryptoScanner.app
 
 <br />
 
+# 🔐 .env 파일 설정
+```bash
+# .env 파일 위치
+# /CryptoScanner_GUI/.env
+OPENAI_API_KEY=[API KEY]
+Google_API_KEY=[API KEY]
+```
+
+<br />
+
 # 📄 주요 기능
 
 ### **1️⃣ Start Page**
@@ -284,3 +294,21 @@ open CryptoScanner.app
 <br />
 
 이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+
+<br />
+
+# 🧑🏻‍💻 개발자
+### 개발 기간
+2025.07. ~ ING
+<br />
+
+### 개발자
+🧑🏻‍💻 정진호 [(@ZINH00)](https://github.com/ZINH00) \
+🧑🏻‍💻 서정민 [(@seojungmin)](https://github.com/noir1458) \
+🧑🏻‍💻 하준수 [(@JunsuHa)](https://github.com/junsu0306) \
+👩🏻‍💻 신찬희 [(@chan-068)](https://github.com/chan-068) \
+🧑🏻‍💻 한상우 [(@Sangwoo Hahn)](https://github.com/sw-player)
+<br />
+
+### 소속
+<img src="https://www.kitribob.kr/static/front/images/common/logo.gif" alt="BoB 14TH Dev" width="200px">

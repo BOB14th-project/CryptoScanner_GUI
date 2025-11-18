@@ -73,7 +73,8 @@ const QuickScanPage: React.FC<QuickScanPageProps> = ({
         nonPqcCount: scanResult.nonPqcCount || 0,
         fileCount: scanResult.fileCount || (scanType === 'file' ? 1 : 0),
         riskLevel: scanResult.nonPqcCount > 50 ? 'High' : scanResult.nonPqcCount > 10 ? 'Medium' : 'Low',
-        detections: scanResult.detections || []
+        detections: scanResult.detections || [],
+        dbFileIds: scanResult.dbFileIds // Add database file IDs from scan result
       };
 
       onScanComplete(result);

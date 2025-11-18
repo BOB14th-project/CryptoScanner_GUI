@@ -6,6 +6,7 @@ export interface ElectronAPI {
   startScan: (options: any) => Promise<any>;
   cancelScan: () => Promise<any>;
   saveCsv: (data: string) => Promise<any>;
+  generateReport: (scanResult: any) => Promise<any>;
   onScanProgress: (callback: (event: IpcRendererEvent, ...args: any[]) => void) => void;
   removeAllListeners: (channel: string) => void;
 }
@@ -16,6 +17,7 @@ const electronAPI: ElectronAPI = {
   startScan: (options) => ipcRenderer.invoke('start-scan', options),
   cancelScan: () => ipcRenderer.invoke('cancel-scan'),
   saveCsv: (data) => ipcRenderer.invoke('save-csv', data),
+  generateReport: (scanResult) => ipcRenderer.invoke('generate-report', scanResult),
   onScanProgress: (callback) => ipcRenderer.on('scan-progress', callback),
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
 };

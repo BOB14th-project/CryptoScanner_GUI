@@ -35,7 +35,7 @@ DynamicAnalysis/build-windows
 DynamicAnalysis/logs
 
 # LLM-Report
-LLM-Report
+LLM-Report/temp_extract
 
 # library
 CryptoScanner/third_party/miniz/*.o
@@ -61,6 +61,7 @@ linux-arm
 linux-amd
 win-amd
 win-unpacked
+.env
 .vscode
 .DS_Store
 .gitattributes
