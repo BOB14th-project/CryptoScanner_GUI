@@ -34,6 +34,9 @@ DynamicAnalysis/build-linux
 DynamicAnalysis/build-windows
 DynamicAnalysis/logs
 
+# LLM-Report
+LLM-Report
+
 # library
 CryptoScanner/third_party/miniz/*.o
 CryptoScanner/third_party/miniz/*.obj
