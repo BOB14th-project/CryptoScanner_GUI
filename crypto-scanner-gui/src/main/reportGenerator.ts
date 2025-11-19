@@ -434,9 +434,8 @@ export async function generateReport(scanResult: ScanResult, outputPath: string)
     // 3. Gemini API로 보고서 내용 생성
     const reportContent = await generateReportContent(scanResult, csvData, dbData);
 
-    // 4. 템플릿 파일 경로 (상대 경로로 수정)
-    const projectRoot = path.resolve(__dirname, '../../..');
-    const templatePath = path.join(projectRoot, 'LLM-Report', 'CryptoScanner_Report.docx');
+    // 4. 템플릿 파일 경로 (dist/main/LLM-Report에서 찾기)
+    const templatePath = path.join(__dirname, 'LLM-Report', 'CryptoScanner_Report.docx');
 
     if (!fs.existsSync(templatePath)) {
       throw new Error(`Template file not found: ${templatePath}`);
