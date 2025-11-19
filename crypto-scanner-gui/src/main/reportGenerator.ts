@@ -349,6 +349,9 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
       let jsonStr = jsonText.substring(firstBrace, lastBrace + 1);
 
+      // Remove control characters (0x00-0x1F except \n, \r, \t) that break JSON parsing
+      jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+
       try {
         // First attempt: parse as-is
         const parsedResponse = JSON.parse(jsonStr);
@@ -431,8 +434,9 @@ export async function generateReport(scanResult: ScanResult, outputPath: string)
     // 3. Gemini API로 보고서 내용 생성
     const reportContent = await generateReportContent(scanResult, csvData, dbData);
 
-    // 4. 템플릿 파일 경로
-    const templatePath = '/Users/jungjinho/Desktop/CryptoScanner_GUI/LLM-Report/CryptoScanner_Report.docx';
+    // 4. 템플릿 파일 경로 (상대 경로로 수정)
+    const projectRoot = path.resolve(__dirname, '../../..');
+    const templatePath = path.join(projectRoot, 'LLM-Report', 'CryptoScanner_Report.docx');
 
     if (!fs.existsSync(templatePath)) {
       throw new Error(`Template file not found: ${templatePath}`);

@@ -20,7 +20,7 @@ const filesToCopy = [
   { src: path.join(sourceDir, 'libstdc++-6.dll'), dest: path.join(destDir, 'libstdc++-6.dll'), optional: true },
   { src: path.join(sourceDir, 'libwinpthread-1.dll'), dest: path.join(destDir, 'libwinpthread-1.dll'), optional: true },
   { src: path.join(sourceDir, 'libatomic-1.dll'), dest: path.join(destDir, 'libatomic-1.dll'), optional: true },
-  { src: path.join(sourceDir, 'patterns.json'), dest: path.join(destDir, 'patterns.json'), optional: false },
+  { src: path.join(sourceDir, 'patterns.json'), dest: path.join(destDir, 'patterns.json'), optional: true },
 ];
 
 // Copy dynamic analysis binaries
@@ -94,6 +94,20 @@ if (fs.existsSync(dynamicAnalysisLinuxLibDir)) {
 }
 
 console.log('Copying backend files...');
+
+// Copy .env file if it exists
+const envSourcePath = path.join(__dirname, '..', '..', '.env');
+const envDestPath = path.join(destDir, '.env');
+if (fs.existsSync(envSourcePath)) {
+  try {
+    fs.copyFileSync(envSourcePath, envDestPath);
+    console.log('✓ Copied: .env');
+  } catch (error) {
+    console.log('⚠ Warning: Could not copy .env file:', error.message);
+  }
+} else {
+  console.log('- Note: .env file not found at', envSourcePath);
+}
 
 for (const file of filesToCopy) {
   if (fs.existsSync(file.src)) {
