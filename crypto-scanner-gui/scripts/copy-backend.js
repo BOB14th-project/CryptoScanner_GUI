@@ -109,6 +109,30 @@ if (fs.existsSync(envSourcePath)) {
   console.log('- Note: .env file not found at', envSourcePath);
 }
 
+// Copy LLM-Report template directory
+const llmReportSourceDir = path.join(__dirname, '..', '..', 'LLM-Report');
+const llmReportDestDir = path.join(destDir, 'LLM-Report');
+if (fs.existsSync(llmReportSourceDir)) {
+  try {
+    // Create LLM-Report directory in dest
+    if (!fs.existsSync(llmReportDestDir)) {
+      fs.mkdirSync(llmReportDestDir, { recursive: true });
+    }
+
+    // Copy template file
+    const templateSource = path.join(llmReportSourceDir, 'CryptoScanner_Report.docx');
+    const templateDest = path.join(llmReportDestDir, 'CryptoScanner_Report.docx');
+    if (fs.existsSync(templateSource)) {
+      fs.copyFileSync(templateSource, templateDest);
+      console.log('✓ Copied: LLM-Report/CryptoScanner_Report.docx');
+    }
+  } catch (error) {
+    console.log('⚠ Warning: Could not copy LLM-Report template:', error.message);
+  }
+} else {
+  console.log('- Note: LLM-Report directory not found at', llmReportSourceDir);
+}
+
 for (const file of filesToCopy) {
   if (fs.existsSync(file.src)) {
     try {
