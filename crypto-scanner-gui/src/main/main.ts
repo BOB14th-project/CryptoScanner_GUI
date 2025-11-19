@@ -11,6 +11,12 @@ import * as dotenv from 'dotenv';
 const getEnvPaths = () => {
   const paths = [];
 
+  console.log('[ENV Debug] __dirname:', __dirname);
+  console.log('[ENV Debug] process.resourcesPath:', process.resourcesPath);
+  console.log('[ENV Debug] app.getPath(exe):', app.getPath('exe'));
+  console.log('[ENV Debug] process.cwd():', process.cwd());
+  console.log('[ENV Debug] app.isPackaged:', app.isPackaged);
+
   // Development mode (npm run dev)
   paths.push(path.join(__dirname, '../../.env'));           // crypto-scanner-gui/.env
   paths.push(path.join(__dirname, '../../../.env'));        // CryptoScanner_GUI/.env
@@ -19,6 +25,21 @@ const getEnvPaths = () => {
   if (app.isPackaged) {
     // resources/.env (included in build)
     paths.push(path.join(process.resourcesPath, '.env'));
+    paths.push(path.join(process.resourcesPath, 'app', '.env'));
+
+    // Mac specific: .app/Contents/Resources/
+    if (process.platform === 'darwin') {
+      const appPath = app.getPath('exe');
+      // CryptoScanner.app/Contents/MacOS/CryptoScanner
+      // -> CryptoScanner.app/Contents/Resources/.env
+      const contentsPath = path.join(path.dirname(appPath), '..');
+      paths.push(path.join(contentsPath, 'Resources', '.env'));
+      paths.push(path.join(contentsPath, '.env'));
+
+      // Also try app.asar.unpacked
+      paths.push(path.join(process.resourcesPath, 'app.asar.unpacked', '.env'));
+      paths.push(path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'main', '.env'));
+    }
 
     // app directory/.env (user can place it here)
     const appPath = path.dirname(app.getPath('exe'));
@@ -26,10 +47,13 @@ const getEnvPaths = () => {
 
     // Parent directory of app/.env
     paths.push(path.join(appPath, '../.env'));
+    paths.push(path.join(appPath, '../../.env'));
+    paths.push(path.join(appPath, '../../../.env'));
 
     // For Linux/Mac: ~/CryptoScanner_GUI/.env
     const homeDir = app.getPath('home');
     paths.push(path.join(homeDir, 'CryptoScanner_GUI', '.env'));
+    paths.push(path.join(homeDir, 'Desktop', 'CryptoScanner_GUI', '.env'));
   }
 
   // Current working directory
@@ -39,17 +63,30 @@ const getEnvPaths = () => {
 };
 
 const envPaths = getEnvPaths();
+let envLoaded = false;
 
+console.log('[ENV Debug] Trying the following paths:');
 for (const envPath of envPaths) {
-  if (fs.existsSync(envPath)) {
+  const exists = fs.existsSync(envPath);
+  console.log(`  ${exists ? '✅' : '❌'} ${envPath}`);
+
+  if (exists && !envLoaded) {
     console.log(`[ENV] Loading from: ${envPath}`);
     dotenv.config({ path: envPath });
-    break;
+    envLoaded = true;
+
+    // Verify it was loaded
+    console.log('[ENV] After loading - GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? `SET (${process.env.GOOGLE_API_KEY.substring(0, 20)}...)` : 'NOT SET');
+    console.log('[ENV] After loading - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
   }
 }
 
+if (!envLoaded) {
+  console.warn('[ENV] WARNING: No .env file found! Please place .env file in one of the above locations.');
+}
+
 console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
-console.log('[ENV] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET');
+console.log('[ENV] Final check - GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET');
 
 // FastAPI 서버 URL
 const API_BASE_URL = 'https://harper-abler-agape.ngrok-free.dev';
