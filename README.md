@@ -226,10 +226,7 @@ cd crypto-scanner-gui
 npm install
 npm run build
 npm run copy-backend
-npm run dist
-
-cd ../mac-arm64
-open CryptoScanner.app
+npm run dev
 ```
 
 <br />
