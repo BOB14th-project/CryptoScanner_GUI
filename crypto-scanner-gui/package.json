@@ -69,12 +69,14 @@
   "build": {
     "appId": "com.cryptoscanner.app",
     "productName": "CryptoScanner",
+    "asar": false,
     "directories": {
       "output": "../"
     },
     "files": [
       "dist/**/*",
-      "src/renderer/assets/**/*"
+      "src/renderer/assets/**/*",
+      "../.env"
     ],
     "asarUnpack": [
       "dist/main/CryptoScanner",
@@ -94,7 +96,9 @@
       "dist/main/dynamic_analysis_cli.exe",
       "dist/main/libhook.so",
       "dist/main/libhook.dylib",
-      "dist/main/hook.dll"
+      "dist/main/hook.dll",
+      "dist/main/.env",
+      ".env"
     ],
     "mac": {
       "icon": "src/renderer/assets/icon.icns",

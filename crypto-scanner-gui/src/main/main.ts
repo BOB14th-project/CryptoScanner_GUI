@@ -8,11 +8,37 @@ import { generateReport } from './reportGenerator';
 import * as dotenv from 'dotenv';
 
 // .env 파일 로드 (여러 경로 시도)
-const envPaths = [
-  path.join(__dirname, '../../.env'),           // crypto-scanner-gui/.env
-  path.join(__dirname, '../../../.env'),        // CryptoScanner_GUI/.env
-  path.join(process.cwd(), '.env'),             // 현재 작업 디렉토리
-];
+const getEnvPaths = () => {
+  const paths = [];
+
+  // Development mode (npm run dev)
+  paths.push(path.join(__dirname, '../../.env'));           // crypto-scanner-gui/.env
+  paths.push(path.join(__dirname, '../../../.env'));        // CryptoScanner_GUI/.env
+
+  // Production mode (packaged app)
+  if (app.isPackaged) {
+    // resources/.env (included in build)
+    paths.push(path.join(process.resourcesPath, '.env'));
+
+    // app directory/.env (user can place it here)
+    const appPath = path.dirname(app.getPath('exe'));
+    paths.push(path.join(appPath, '.env'));
+
+    // Parent directory of app/.env
+    paths.push(path.join(appPath, '../.env'));
+
+    // For Linux/Mac: ~/CryptoScanner_GUI/.env
+    const homeDir = app.getPath('home');
+    paths.push(path.join(homeDir, 'CryptoScanner_GUI', '.env'));
+  }
+
+  // Current working directory
+  paths.push(path.join(process.cwd(), '.env'));
+
+  return paths;
+};
+
+const envPaths = getEnvPaths();
 
 for (const envPath of envPaths) {
   if (fs.existsSync(envPath)) {
@@ -23,7 +49,7 @@ for (const envPath of envPaths) {
 }
 
 console.log('=== MAIN PROCESS STARTED - NEW VERSION ===');
-console.log('[ENV] GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'SET' : 'NOT SET');
+console.log('[ENV] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET');
 
 // FastAPI 서버 URL
 const API_BASE_URL = 'https://harper-abler-agape.ngrok-free.dev';
@@ -2080,13 +2106,13 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
                         if (disasmSuccess && fs.existsSync(tmpAsmPath)) {
                           const stats = fs.statSync(tmpAsmPath);
-                          const MAX_ASM_SIZE = 50 * 1024 * 1024; // 50MB limit
+                          const MAX_ASM_SIZE = 1 * 1024 * 1024; // 1MB limit for MySQL compatibility
 
                           let asmContent = '';
                           if (stats.size <= MAX_ASM_SIZE) {
                             asmContent = fs.readFileSync(tmpAsmPath, 'utf-8');
                           } else {
-                            // If too large, read first 50MB
+                            // If too large, read first 1MB
                             const fd = fs.openSync(tmpAsmPath, 'r');
                             const buffer = Buffer.alloc(MAX_ASM_SIZE);
                             const bytesRead = fs.readSync(fd, buffer, 0, MAX_ASM_SIZE, 0);
@@ -2160,6 +2186,7 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                       const files = fs.readdirSync(fileResultDir);
 
                       let asmFileBuffer: Buffer | undefined;
+                      let asmFileText: string | undefined; // For text-based ASM files
                       let binFileBuffer: Buffer | undefined;
                       let asmFileName: string | undefined;
                       let binFileName: string | undefined;
@@ -2175,32 +2202,37 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                         if (stat.isFile()) {
                           const ext = path.extname(file).toLowerCase();
 
-                          // Read .asm file
+                          // Read .asm file (as text, like Mac objdump)
                           if (ext === '.asm') {
                             try {
                               asmOriginalSize = stat.size;
-                              if (stat.size > MAX_INLINE_UPLOAD_BYTES) {
+                              const MAX_ASM_SIZE = 1 * 1024 * 1024; // 1MB limit for MySQL compatibility
+
+                              if (stat.size > MAX_ASM_SIZE) {
+                                // Read first 50MB as text
                                 const fd = fs.openSync(fullPath, 'r');
                                 try {
-                                  const bytesToRead = Math.min(MAX_INLINE_UPLOAD_BYTES, Number(stat.size));
+                                  const bytesToRead = Math.min(MAX_ASM_SIZE, Number(stat.size));
                                   const limitedBuffer = Buffer.allocUnsafe(bytesToRead);
                                   const bytesRead = fs.readSync(fd, limitedBuffer, 0, bytesToRead, 0);
-                                  asmFileBuffer = limitedBuffer.subarray(0, bytesRead);
-                                  asmFileName = `${path.basename(file, ext)}_partial${ext}`;
+                                  asmFileText = `[TRUNCATED - First ${bytesRead} bytes of ${stat.size} total]\n\n` +
+                                                limitedBuffer.toString('utf-8', 0, bytesRead);
+                                  asmFileName = file;
                                   asmWasTruncated = true;
-                                  console.warn(`ASM file ${file} is ${stat.size} bytes; uploading first ${bytesRead} bytes only to avoid memory exhaustion`);
+                                  console.warn(`ASM file ${file} is ${stat.size} bytes; truncated to first ${bytesRead} bytes`);
                                 } finally {
                                   fs.closeSync(fd);
                                 }
                               } else {
-                                asmFileBuffer = fs.readFileSync(fullPath);
+                                // Read entire file as text
+                                asmFileText = fs.readFileSync(fullPath, 'utf-8');
                                 asmFileName = file;
                               }
 
-                              if (asmFileBuffer && asmFileName) {
+                              if (asmFileText && asmFileName) {
                                 const sizeInfo = asmWasTruncated
-                                  ? `${asmFileBuffer.length} bytes of ${stat.size}`
-                                  : `${asmFileBuffer.length} bytes`;
+                                  ? `${asmFileText.length} chars of ${stat.size} bytes`
+                                  : `${asmFileText.length} chars`;
                                 console.log(`Read ASM file: ${asmFileName} (${sizeInfo})`);
                               }
                             } catch (asmError) {
@@ -2251,10 +2283,11 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                               continue;
                             }
 
-                            const asmBuffers: Buffer[] = [];
-                            let collectedBytes = 0;
+                            const asmTexts: string[] = [];
+                            let collectedChars = 0;
                             let totalChunkBytes = 0;
                             let truncated = false;
+                            const MAX_ASM_SIZE = 1 * 1024 * 1024; // 1MB limit for MySQL compatibility
 
                             for (const asmFile of asmFiles) {
                               const asmPath = path.join(fullPath, asmFile);
@@ -2268,59 +2301,64 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
 
                               totalChunkBytes += chunkStat.size;
 
-                              const header = Buffer.from(`
+                              const header = `
 
 --- ${asmFile} ---
 
-`);
-                              if (collectedBytes + header.length > MAX_INLINE_UPLOAD_BYTES) {
+`;
+                              if (collectedChars + header.length > MAX_ASM_SIZE) {
                                 truncated = true;
                                 break;
                               }
-                              asmBuffers.push(header);
-                              collectedBytes += header.length;
+                              asmTexts.push(header);
+                              collectedChars += header.length;
 
-                              if (collectedBytes >= MAX_INLINE_UPLOAD_BYTES) {
+                              if (collectedChars >= MAX_ASM_SIZE) {
                                 truncated = true;
                                 break;
                               }
 
-                              const remaining = MAX_INLINE_UPLOAD_BYTES - collectedBytes;
+                              const remaining = MAX_ASM_SIZE - collectedChars;
                               if (remaining <= 0) {
                                 truncated = true;
                                 break;
                               }
 
-                              const bytesToRead = Math.min(remaining, chunkStat.size);
-                              if (bytesToRead <= 0) {
-                                truncated = true;
-                                break;
-                              }
-
-                              const fd = fs.openSync(asmPath, 'r');
+                              // Read ASM chunk as text
                               try {
-                                const chunkBuffer = Buffer.allocUnsafe(bytesToRead);
-                                const bytesRead = fs.readSync(fd, chunkBuffer, 0, bytesToRead, 0);
-                                if (bytesRead > 0) {
-                                  asmBuffers.push(chunkBuffer.subarray(0, bytesRead));
-                                  collectedBytes += bytesRead;
-                                  if (bytesRead < chunkStat.size) {
+                                let chunkText: string;
+                                if (chunkStat.size > remaining) {
+                                  // Read partial chunk
+                                  const fd = fs.openSync(asmPath, 'r');
+                                  try {
+                                    const chunkBuffer = Buffer.allocUnsafe(remaining);
+                                    const bytesRead = fs.readSync(fd, chunkBuffer, 0, remaining, 0);
+                                    chunkText = chunkBuffer.toString('utf-8', 0, bytesRead);
                                     truncated = true;
-                                    break;
+                                  } finally {
+                                    fs.closeSync(fd);
                                   }
+                                } else {
+                                  // Read full chunk
+                                  chunkText = fs.readFileSync(asmPath, 'utf-8');
                                 }
-                              } finally {
-                                fs.closeSync(fd);
+
+                                if (chunkText) {
+                                  asmTexts.push(chunkText);
+                                  collectedChars += chunkText.length;
+                                }
+                              } catch (readErr) {
+                                console.error(`Error reading ASM chunk ${asmFile}:`, readErr);
                               }
 
-                              if (collectedBytes >= MAX_INLINE_UPLOAD_BYTES) {
+                              if (collectedChars >= MAX_ASM_SIZE) {
                                 truncated = true;
                                 break;
                               }
                             }
 
-                            if (asmBuffers.length > 0) {
-                              asmFileBuffer = Buffer.concat(asmBuffers, collectedBytes);
+                            if (asmTexts.length > 0) {
+                              asmFileText = asmTexts.join('');
                               const baseName = file.replace('.chunks', '');
                               asmFileName = truncated
                                 ? `${baseName}_combined_partial.asm`
@@ -2328,11 +2366,11 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                               asmOriginalSize = totalChunkBytes;
                               asmWasTruncated = truncated;
                               const sizeInfo = truncated
-                                ? `${asmFileBuffer.length} bytes of ${totalChunkBytes}`
-                                : `${asmFileBuffer.length} bytes`;
+                                ? `${asmFileText.length} chars of ${totalChunkBytes} bytes`
+                                : `${asmFileText.length} chars`;
                               console.log(`Read combined ASM chunks: ${asmFiles.length} files (${sizeInfo})`);
                               if (truncated) {
-                                console.warn(`Truncated ASM chunk aggregate to ${asmFileBuffer.length} bytes (limit ${MAX_INLINE_UPLOAD_BYTES})`);
+                                console.warn(`Truncated ASM chunk aggregate to ${asmFileText.length} chars (limit ${MAX_ASM_SIZE})`);
                               }
                             }
                           } catch (chunkError) {
@@ -2341,21 +2379,21 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                         }
                       }
 
-                      // Save extracted files (Base64 encoding with size cap)
-                      if (asmFileBuffer || binFileBuffer) {
+                      // Save extracted files
+                      if (asmFileText || binFileBuffer) {
                         try {
-                          // ASM file payload (File_text field)
-                          if (asmFileBuffer && asmFileName) {
-                            const asmBase64 = asmFileBuffer.toString('base64');
+                          // ASM file payload (File_text field) - Save as text like Mac objdump
+                          if (asmFileText && asmFileName) {
                             await callAPI(`/files/${fileId}/llm/`, 'POST', {
                               File_id: fileId,
                               Scan_id: scanId,
-                              File_text: `[ASM_FILE:${asmFileName}]${asmBase64}`,
+                              File_text: asmFileText,
+                              Code: '', // Required field, but empty for disassembly
                             });
                             if (asmWasTruncated) {
-                              console.warn(`Saved partial ASM file ${asmFileName} (${asmFileBuffer.length} of ${asmOriginalSize} bytes)`);
+                              console.warn(`✅ Saved partial ASM file ${asmFileName} (${asmFileText.length} chars of ${asmOriginalSize} bytes)`);
                             } else {
-                              console.log(`Saved ASM file: ${asmFileName} (${asmFileBuffer.length} bytes)`);
+                              console.log(`✅ Saved ASM file: ${asmFileName} (${asmFileText.length} chars)`);
                             }
                           }
 
@@ -2376,7 +2414,7 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
                         } catch (saveError) {
                           console.error(`Error saving files for file ID ${fileId}:`, saveError);
                         } finally {
-                          asmFileBuffer = undefined;
+                          asmFileText = undefined;
                           binFileBuffer = undefined;
                         }
                       }
