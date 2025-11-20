@@ -26,6 +26,14 @@ const getEnvPaths = () => {
     // resources/.env (included in build)
     paths.push(path.join(process.resourcesPath, '.env'));
     paths.push(path.join(process.resourcesPath, 'app', '.env'));
+    paths.push(path.join(process.resourcesPath, 'app', 'dist', 'main', '.env'));
+
+    // Windows specific: resources/app/dist/main/.env
+    if (process.platform === 'win32') {
+      paths.push(path.join(__dirname, '.env'));  // dist/main/.env
+      paths.push(path.join(__dirname, '..', '..', '.env'));  // resources/.env
+      paths.push(path.join(process.resourcesPath, 'app', 'dist', '.env'));
+    }
 
     // Mac specific: .app/Contents/Resources/
     if (process.platform === 'darwin') {
@@ -231,7 +239,8 @@ async function uploadFilesToAPI(
 }
 
 // Limit inline uploads to avoid exhausting the Electron main-process heap when handling large dump files.
-const MAX_INLINE_UPLOAD_BYTES = 32 * 1024 * 1024; // 32 MB
+// Also respects MySQL max_allowed_packet limit (Base64 encoding increases size by ~33%)
+const MAX_INLINE_UPLOAD_BYTES = 1 * 1024 * 1024; // 1 MB (compatible with MySQL)
 
 let mainWindow: BrowserWindow;
 let scannerProcess: ChildProcess | null = null;
