@@ -5,6 +5,18 @@ import axios from 'axios';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 
+interface LLMScanResult {
+  isScanned: boolean;
+  isPqcVulnerable: boolean;
+  detectedAlgorithms: string[];
+  confidenceScore: number;
+  evidence: string;
+  recommendations: string;
+  reportId?: string;
+  scannedAt: string;
+  fileResults?: Record<string, any>;
+}
+
 interface ScanResult {
   id: string;
   date: string;
@@ -16,6 +28,7 @@ interface ScanResult {
   dbFileId?: number;
   dbFileIds?: Record<string, number>;
   dbScanId?: number;
+  llmScanResult?: LLMScanResult;
 }
 
 interface Detection {
@@ -139,40 +152,55 @@ async function fetchDatabaseData(scanResult: ScanResult): Promise<any> {
     // LLM 데이터 조회 (어셈블리 파일, 코드, 로그)
     let llmData: any = {};
 
+    // Get scan_id from scanResult
+    const scanId = scanResult.dbScanId;
+    if (!scanId) {
+      console.log('[DB] No scan_id available, skipping LLM data retrieval');
+      return {
+        file: fileResponse.data,
+        llm: null,
+      };
+    }
+
+    console.log(`[DB] Using scan_id: ${scanId} for LLM data retrieval`);
+
     try {
       const asmResponse = await axios.get(`${DB_API_BASE_URL}/files/${fileId}/llm/`, {
+        params: { scan_id: scanId },
         headers: {
           'ngrok-skip-browser-warning': 'true',
         },
       });
       llmData.assembly = asmResponse.data;
       console.log('[DB] Assembly data retrieved');
-    } catch (error) {
-      console.log('[DB] No assembly file found');
+    } catch (error: any) {
+      console.log('[DB] No assembly file found:', error.response?.status || error.message);
     }
 
     try {
       const codeResponse = await axios.get(`${DB_API_BASE_URL}/files/${fileId}/llm_code/`, {
+        params: { scan_id: scanId },
         headers: {
           'ngrok-skip-browser-warning': 'true',
         },
       });
       llmData.code = codeResponse.data;
       console.log('[DB] Code data retrieved');
-    } catch (error) {
-      console.log('[DB] No code file found');
+    } catch (error: any) {
+      console.log('[DB] No code file found:', error.response?.status || error.message);
     }
 
     try {
       const logResponse = await axios.get(`${DB_API_BASE_URL}/files/${fileId}/llm_log/`, {
+        params: { scan_id: scanId },
         headers: {
           'ngrok-skip-browser-warning': 'true',
         },
       });
       llmData.log = logResponse.data;
       console.log('[DB] Log data retrieved');
-    } catch (error) {
-      console.log('[DB] No log file found');
+    } catch (error: any) {
+      console.log('[DB] No log file found:', error.response?.status || error.message);
     }
 
     return {
@@ -263,12 +291,28 @@ async function generateReportContent(
       `- ${algo}: ${info.count}회 탐지 (${Array.from(info.methods).join(', ')} 분석)`
     ).join('\n');
 
+    // Include LLM scan results if available
+    const llmScanInfo = scanResult.llmScanResult?.isScanned
+      ? `\n**LLM Scan Results:**
+- Vulnerability Status: ${scanResult.llmScanResult.isPqcVulnerable ? 'VULNERABLE' : 'SAFE'}
+- Confidence Score: ${(scanResult.llmScanResult.confidenceScore * 100).toFixed(1)}%
+- Detected Algorithms: ${scanResult.llmScanResult.detectedAlgorithms.join(', ') || 'None'}
+- Scanned At: ${scanResult.llmScanResult.scannedAt}
+
+**LLM Evidence:**
+${scanResult.llmScanResult.evidence.substring(0, 2000)}${scanResult.llmScanResult.evidence.length > 2000 ? '\n... (truncated)' : ''}
+
+**LLM Recommendations:**
+${scanResult.llmScanResult.recommendations.substring(0, 2000)}${scanResult.llmScanResult.recommendations.length > 2000 ? '\n... (truncated)' : ''}`
+      : '';
+
     const prompt = `You are an expert cryptography security analyst specializing in post-quantum cryptography (PQC) migration. Analyze the following scan results and generate a DETAILED, COMPREHENSIVE security report in Korean.
 
 **Scan Information:**
 - Scan Type: ${scanResult.type}
 - Target Path: ${scanResult.filePath}
 - Total Non-PQC Detections: ${scanResult.nonPqcCount}
+${scanResult.llmScanResult?.isScanned ? `- LLM Scan Performed: Yes\n- Overall Vulnerability: ${scanResult.llmScanResult.isPqcVulnerable ? 'High Risk' : 'Low Risk'}` : ''}
 
 **Detected Algorithms Summary:**
 ${algorithmInfo}
@@ -281,6 +325,7 @@ ${dbData?.file ? `\n**Database File Information:**\n${JSON.stringify(dbData.file
 ${dbData?.llm?.assembly ? `\n**Assembly Code Available:** Yes (${typeof dbData.llm.assembly === 'string' ? dbData.llm.assembly.length : 'available'} bytes)` : ''}
 ${dbData?.llm?.code ? `\n**Source Code Available:** Yes` : ''}
 ${dbData?.llm?.log ? `\n**Analysis Logs Available:** Yes` : ''}
+${llmScanInfo}
 
 **IMPORTANT INSTRUCTIONS:**
 
@@ -351,7 +396,13 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
       let jsonStr = jsonText.substring(firstBrace, lastBrace + 1);
 
       // Remove control characters (0x00-0x1F except \n, \r, \t) that break JSON parsing
-      jsonStr = jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+      // Also normalize line breaks and remove any other problematic characters
+      jsonStr = jsonStr
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '') // Remove control chars
+        .replace(/\r\n/g, '\\n') // Normalize Windows line breaks
+        .replace(/\r/g, '\\n')   // Normalize Mac line breaks
+        .replace(/\n/g, '\\n')   // Escape remaining newlines
+        .replace(/\t/g, '\\t');  // Escape tabs
 
       try {
         // First attempt: parse as-is

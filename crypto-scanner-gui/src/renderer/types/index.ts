@@ -11,6 +11,29 @@ export interface ScanResult {
   dbFileId?: number; // Database file ID from API
   dbFileIds?: Record<string, number>; // Map of filePath to database file ID
   dbScanId?: number; // Database scan ID from API
+  llmScanResult?: LLMScanResult; // LLM scan analysis result
+}
+
+export interface LLMScanResult {
+  isScanned: boolean; // Whether LLM scan has been performed
+  isPqcVulnerable: boolean; // Vulnerability status
+  detectedAlgorithms: string[]; // Detected crypto algorithms
+  confidenceScore: number; // Detection confidence (0-1)
+  evidence: string; // Code snippets or evidence
+  recommendations: string; // PQC migration recommendations
+  reportId?: string; // AI Server report ID
+  scannedAt: string; // Timestamp of scan
+  fileResults?: Record<string, FileLLMResult>; // For folder scans with multiple files
+}
+
+export interface FileLLMResult {
+  fileName: string;
+  fileId: number;
+  isPqcVulnerable: boolean;
+  detectedAlgorithms: string[];
+  confidenceScore: number;
+  evidence: string;
+  recommendations: string;
 }
 
 export interface Detection {
@@ -56,7 +79,8 @@ export type PageType =
   | 'analyze'
   | 'quick-scan'
   | 'full-scan'
-  | 'loading';
+  | 'loading'
+  | 'llm-detail';
 
 export type ScanType = 'folder' | 'file' | 'full';
 

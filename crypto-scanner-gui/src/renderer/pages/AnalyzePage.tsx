@@ -6,6 +6,7 @@ import { LuShieldAlert } from "react-icons/lu";
 interface AnalyzePageProps {
   result: ScanResult;
   onNavigate: (page: PageType) => void;
+  onUpdateScanResult?: (result: ScanResult) => void;
 }
 
 interface AlgorithmInfo {
@@ -13,13 +14,14 @@ interface AlgorithmInfo {
   description?: string;
 }
 
-const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
+const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateScanResult }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [algorithmDescriptions, setAlgorithmDescriptions] = useState<Map<string, string>>(new Map());
   const [hoveredAlgo, setHoveredAlgo] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
+  const [isLLMScanning, setIsLLMScanning] = useState<boolean>(false);
 
   // Load patterns.json to get algorithm descriptions
   useEffect(() => {
@@ -351,6 +353,54 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
       alert(`보고서 생성 중 오류가 발생했습니다: ${error}`);
     } finally {
       setIsGeneratingReport(false);
+    }
+  };
+
+  const handleLLMScan = async () => {
+    console.log('handleLLMScan called');
+    console.log('window.electronAPI:', window.electronAPI);
+
+    if (!window.electronAPI?.performLLMScan) {
+      console.error('performLLMScan API not available');
+      alert('LLM Scan API not available');
+      return;
+    }
+
+    // Show loading modal immediately
+    setIsLLMScanning(true);
+
+    // Small delay to ensure modal is rendered
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    try {
+      console.log('Calling performLLMScan with result:', result);
+      const llmScanResult = await window.electronAPI.performLLMScan(result);
+      console.log('LLM Scan result:', llmScanResult);
+
+      if (llmScanResult.success) {
+        // Update the scan result with LLM scan data
+        const updatedResult = {
+          ...result,
+          llmScanResult: llmScanResult.data
+        };
+
+        // Update the parent state if callback is provided
+        if (onUpdateScanResult) {
+          onUpdateScanResult(updatedResult);
+        }
+
+        alert('LLM Scan completed successfully!');
+
+        // Navigate to LLM detail page
+        onNavigate('llm-detail');
+      } else {
+        alert(`LLM Scan failed: ${llmScanResult.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to perform LLM scan:', error);
+      alert(`Error during LLM scan: ${error}`);
+    } finally {
+      setIsLLMScanning(false);
     }
   };
 
@@ -918,6 +968,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
             margin-top: 40px !important;
           }
         }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
       `}</style>
       <div className="analyze-container">
       {/* Navigation and Header Container */}
@@ -1306,8 +1361,9 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                     justifyContent: 'center',
                     alignItems: 'center',
                     gap: '8px',
-                    padding: '10px 20px',
+                    padding: '12px 20px',
                     height: '44px',
+                    minHeight: '44px',
                     background: isGeneratingReport
                       ? 'rgba(128, 128, 128, 0.5)'
                       : 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
@@ -1465,38 +1521,82 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
                   * Results are responses from the LLM. Use for reference only.
                 </p>
 
-                {/* Scan Start Button */}
-                <button
-                  onClick={() => {
-                    console.log('LLM Scan Start clicked');
-                    // TODO: Implement LLM scan functionality
-                  }}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '10px 20px',
-                    height: '44px',
-                    background: 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
-                    backgroundBlendMode: 'normal, overlay',
-                    boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
-                    backdropFilter: 'blur(10px)',
-                    borderRadius: '999px',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <FaPlay size={14} color="#FFFFFF" />
-                  <span style={{
-                    fontFamily: 'SF Pro Rounded',
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    color: '#FFFFFF',
-                    whiteSpace: 'nowrap'
-                  }}>Scan Start</span>
-                </button>
+                {/* LLM Scan Buttons */}
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  gap: '12px',
+                  width: '100%',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}>
+                  <button
+                    onClick={handleLLMScan}
+                    disabled={isLLMScanning}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '12px 20px',
+                      height: '44px',
+                      minHeight: '44px',
+                      background: isLLMScanning
+                        ? 'rgba(128, 128, 128, 0.5)'
+                        : 'linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)), rgba(255, 255, 255, 0.5)',
+                      backgroundBlendMode: 'normal, overlay',
+                      boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
+                      backdropFilter: 'blur(10px)',
+                      borderRadius: '999px',
+                      border: 'none',
+                      cursor: isLLMScanning ? 'not-allowed' : 'pointer',
+                      opacity: isLLMScanning ? 0.6 : 1
+                    }}
+                  >
+                    <FaPlay size={14} color="#FFFFFF" />
+                    <span style={{
+                      fontFamily: 'SF Pro Rounded',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#FFFFFF',
+                      whiteSpace: 'nowrap'
+                    }}>{isLLMScanning ? 'Scanning...' : 'Scan Start'}</span>
+                  </button>
+
+                  {/* View detailed results button - shown if LLM scan has been completed */}
+                  {result.llmScanResult?.isScanned && (
+                    <button
+                      onClick={() => onNavigate('llm-detail')}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '12px 20px',
+                        height: '44px',
+                        minHeight: '44px',
+                        background: 'linear-gradient(0deg, rgba(100, 200, 255, 0.2), rgba(100, 200, 255, 0.2)), rgba(100, 200, 255, 0.4)',
+                        backgroundBlendMode: 'normal, overlay',
+                        boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
+                        backdropFilter: 'blur(10px)',
+                        borderRadius: '999px',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <FaFileAlt size={14} color="#FFFFFF" />
+                      <span style={{
+                        fontFamily: 'SF Pro Rounded',
+                        fontWeight: 600,
+                        fontSize: '14px',
+                        color: '#FFFFFF',
+                        whiteSpace: 'nowrap'
+                      }}>View detailed results</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -1619,14 +1719,69 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate }) => {
               Please wait while we generate your report using AI
             </div>
           </div>
+        </div>
+      )}
 
-          {/* CSS Animation */}
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
+      {/* LLM Scanning Loading Modal */}
+      {isLLMScanning && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000000,
+          pointerEvents: 'all'
+        }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px',
+            padding: '40px 60px',
+            background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))',
+            borderRadius: '24px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0px 20px 40px rgba(0, 0, 0, 0.5)'
+          }}>
+            {/* Spinning Circle */}
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              border: '4px solid rgba(255, 255, 255, 0.2)',
+              borderTopColor: '#FFFFFF',
+              animation: 'spin 1s linear infinite'
+            }} />
+
+            {/* Loading Text */}
+            <div style={{
+              fontFamily: 'SF Pro Rounded',
+              fontWeight: 600,
+              fontSize: '20px',
+              color: '#FFFFFF',
+              textAlign: 'center'
+            }}>
+              Performing LLM Scan...
+            </div>
+
+            {/* Subtitle */}
+            <div style={{
+              fontFamily: 'SF Pro',
+              fontWeight: 400,
+              fontSize: '14px',
+              color: 'rgba(255, 255, 255, 0.7)',
+              textAlign: 'center',
+              maxWidth: '300px'
+            }}>
+              Please wait while we analyze your files using AI
+            </div>
+          </div>
         </div>
       )}
     </>

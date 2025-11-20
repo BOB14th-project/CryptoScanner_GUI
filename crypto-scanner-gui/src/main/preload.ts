@@ -7,6 +7,9 @@ export interface ElectronAPI {
   cancelScan: () => Promise<any>;
   saveCsv: (data: string) => Promise<any>;
   generateReport: (scanResult: any) => Promise<any>;
+  readFileForLLM: (filePath: string) => Promise<string>;
+  performLLMScan: (scanResult: any) => Promise<any>;
+  generateComprehensiveReport: (scanResult: any) => Promise<any>;
   onScanProgress: (callback: (event: IpcRendererEvent, ...args: any[]) => void) => void;
   removeAllListeners: (channel: string) => void;
 }
@@ -18,6 +21,9 @@ const electronAPI: ElectronAPI = {
   cancelScan: () => ipcRenderer.invoke('cancel-scan'),
   saveCsv: (data) => ipcRenderer.invoke('save-csv', data),
   generateReport: (scanResult) => ipcRenderer.invoke('generate-report', scanResult),
+  readFileForLLM: (filePath) => ipcRenderer.invoke('read-file-for-llm', filePath),
+  performLLMScan: (scanResult) => ipcRenderer.invoke('perform-llm-scan', scanResult),
+  generateComprehensiveReport: (scanResult) => ipcRenderer.invoke('generate-comprehensive-report', scanResult),
   onScanProgress: (callback) => ipcRenderer.on('scan-progress', callback),
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
 };

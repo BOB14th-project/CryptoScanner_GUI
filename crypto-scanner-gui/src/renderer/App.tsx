@@ -7,6 +7,7 @@ import AnalyzePage from './pages/AnalyzePage';
 import QuickScanPage from './pages/QuickScanPage';
 import FullScanPage from './pages/FullScanPage';
 import LoadingPage from './pages/LoadingPage';
+import LLMScanDetailPage from './pages/LLMScanDetailPage';
 import { loadScanResults, saveScanResults } from './utils/storage';
 import backgroundImage from './assets/images/CryptoScanner.jpg';
 
@@ -119,6 +120,20 @@ const App: React.FC = () => {
     setAppState(prev => ({ ...prev, isScanning }));
   };
 
+  const updateScanResult = (updatedResult: ScanResult) => {
+    setAppState(prev => {
+      const updatedResults = prev.scanResults.map(result =>
+        result.id === updatedResult.id ? updatedResult : result
+      );
+      saveScanResults(updatedResults);
+      return {
+        ...prev,
+        scanResults: updatedResults,
+        selectedResult: updatedResult
+      };
+    });
+  };
+
   const renderCurrentPage = () => {
     switch (appState.currentPage) {
       case 'start':
@@ -138,6 +153,7 @@ const App: React.FC = () => {
           <AnalyzePage
             result={appState.selectedResult!}
             onNavigate={navigateToPage}
+            onUpdateScanResult={updateScanResult}
           />
         );
       case 'quick-scan':
@@ -172,6 +188,15 @@ const App: React.FC = () => {
               setScanning(false);
               navigateToPage('main');
             }}
+          />
+        );
+      case 'llm-detail':
+        return (
+          <LLMScanDetailPage
+            scanResult={appState.selectedResult!}
+            onNavigate={navigateToPage}
+            onBack={goBack}
+            onUpdateScanResult={updateScanResult}
           />
         );
       default:
