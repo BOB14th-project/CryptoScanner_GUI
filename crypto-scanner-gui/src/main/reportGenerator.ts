@@ -368,7 +368,9 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
         console.error('[Gemini] Parse error:', firstError);
 
         // Write the raw response to a temp file for debugging
-        const tempFile = '/tmp/gemini_response.json';
+        const tempFile = process.platform === 'win32'
+          ? path.join(process.env.TEMP || 'C:\\Temp', 'gemini_response.json')
+          : '/tmp/gemini_response.json';
         try {
           fs.writeFileSync(tempFile, jsonStr);
           console.log(`[Gemini] Saved raw response to ${tempFile} for debugging`);
@@ -376,23 +378,85 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
           console.error('[Gemini] Could not save debug file:', writeErr);
         }
 
-        // Fallback to simple extraction: look for the three fields manually
+        // Improved fallback: manually extract fields with better handling of escaped content
         try {
-          const scanTargetMatch = jsonStr.match(/"scanTarget"\s*:\s*"([^"]+)"/);
-          const detailContentMatch = jsonStr.match(/"detailContent"\s*:\s*"([\s\S]*?)"\s*,\s*"migrationGuide"/);
-          const migrationGuideMatch = jsonStr.match(/"migrationGuide"\s*:\s*"([\s\S]*?)"\s*\}/);
+          // Helper function to extract a field value, handling escaped quotes
+          const extractField = (fieldName: string, jsonString: string): string | null => {
+            const pattern = new RegExp(`"${fieldName}"\\s*:\\s*"`, 'i');
+            const startMatch = jsonString.match(pattern);
 
-          if (scanTargetMatch && detailContentMatch && migrationGuideMatch) {
-            console.log('[Gemini] Successfully extracted fields using regex fallback');
+            if (!startMatch || startMatch.index === undefined) {
+              return null;
+            }
+
+            const startIndex = startMatch.index + startMatch[0].length;
+            let endIndex = startIndex;
+            let inEscape = false;
+
+            // Find the closing quote, accounting for escaped quotes
+            while (endIndex < jsonString.length) {
+              const char = jsonString[endIndex];
+
+              if (inEscape) {
+                inEscape = false;
+                endIndex++;
+                continue;
+              }
+
+              if (char === '\\') {
+                inEscape = true;
+                endIndex++;
+                continue;
+              }
+
+              if (char === '"') {
+                break;
+              }
+
+              endIndex++;
+            }
+
+            if (endIndex >= jsonString.length) {
+              return null;
+            }
+
+            const rawValue = jsonString.substring(startIndex, endIndex);
+
+            // Decode escaped sequences using JSON.parse for proper handling
+            try {
+              return JSON.parse(`"${rawValue}"`);
+            } catch {
+              // Fallback: manual unescape
+              return rawValue
+                .replace(/\\n/g, '\n')
+                .replace(/\\r/g, '\r')
+                .replace(/\\t/g, '\t')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\');
+            }
+          };
+
+          const scanTarget = extractField('scanTarget', jsonStr);
+          const detailContent = extractField('detailContent', jsonStr);
+          const migrationGuide = extractField('migrationGuide', jsonStr);
+
+          if (scanTarget && detailContent && migrationGuide) {
+            console.log('[Gemini] Successfully extracted fields using improved manual extraction');
             return {
               scanDate: formatScanDate(scanResult.date, scanResult.time),
-              scanTarget: scanTargetMatch[1],
-              detailContent: detailContentMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
-              migrationGuide: migrationGuideMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')
+              scanTarget: scanTarget,
+              detailContent: detailContent,
+              migrationGuide: migrationGuide
             };
+          } else {
+            console.error('[Gemini] Manual extraction failed - missing fields:', {
+              scanTarget: !!scanTarget,
+              detailContent: !!detailContent,
+              migrationGuide: !!migrationGuide
+            });
           }
         } catch (extractError) {
-          console.error('[Gemini] Regex extraction also failed:', extractError);
+          console.error('[Gemini] Manual extraction error:', extractError);
         }
 
         // If all attempts fail, throw error
