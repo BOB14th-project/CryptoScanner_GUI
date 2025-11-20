@@ -2591,3 +2591,327 @@ ipcMain.handle('generate-report', async (event, scanResult) => {
     };
   }
 });
+
+// ============= LLM Scan IPC Handlers =============
+
+// Read file for LLM analysis
+ipcMain.handle('read-file-for-llm', async (event, filePath) => {
+  try {
+    console.log('[LLM] Reading file for LLM analysis:', filePath);
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    return fileContent;
+  } catch (error) {
+    console.error('[LLM] Error reading file:', error);
+    throw error;
+  }
+});
+
+// Perform LLM scan
+ipcMain.handle('perform-llm-scan', async (event, scanResult) => {
+  try {
+    console.log('[LLM Scan] Starting LLM scan...');
+    console.log('[LLM Scan] Scan result:', JSON.stringify(scanResult, null, 2).substring(0, 500));
+
+    const FormData = require('form-data');
+    const axios = require('axios');
+
+    const AI_SERVER_URL = 'https://endorsingly-semipopular-jackson.ngrok-free.dev/api/v1';
+
+    // Handle multiple files (folder scan) or single file
+    const fileResults: Record<string, any> = {};
+    const filesToScan: Array<{ path: string, id: number }> = [];
+
+    if (scanResult.dbFileIds && Object.keys(scanResult.dbFileIds).length > 0) {
+      // Folder scan with multiple files
+      console.log('[LLM Scan] Folder scan detected, processing multiple files');
+      for (const [filePath, fileId] of Object.entries(scanResult.dbFileIds)) {
+        filesToScan.push({ path: filePath as string, id: fileId as number });
+      }
+    } else if (scanResult.filePath && scanResult.dbFileId) {
+      // Single file scan
+      console.log('[LLM Scan] Single file scan detected');
+      filesToScan.push({ path: scanResult.filePath, id: scanResult.dbFileId });
+    } else {
+      throw new Error('No file information found in scan result');
+    }
+
+    let allDetectedAlgorithms: string[] = [];
+    let overallVulnerable = false;
+    let totalConfidence = 0;
+    let allEvidence: string[] = [];
+    let allRecommendations: string[] = [];
+
+    // Process each file
+    for (const fileInfo of filesToScan) {
+      try {
+        console.log(`[LLM Scan] Analyzing file: ${fileInfo.path}`);
+
+        // Read the file content (could be source code or disassembly)
+        let fileContent: string;
+
+        // Try to get LLM code first (source code if available)
+        try {
+          const response = await axios.get(
+            `https://harper-abler-agape.ngrok-free.dev/files/${fileInfo.id}/llm_code/?scan_id=${scanResult.dbScanId}`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true',
+              }
+            }
+          );
+
+          if (response.data && response.data.length > 0 && response.data[0].Code) {
+            fileContent = response.data[0].Code;
+            console.log(`[LLM Scan] Using source code from database for file ${fileInfo.id}`);
+          } else {
+            throw new Error('No code found in database');
+          }
+        } catch (codeError) {
+          console.log('[LLM Scan] Source code not found, trying disassembly...');
+
+          // Try to get LLM assembly (disassembly for binaries)
+          try {
+            const response = await axios.get(
+              `https://harper-abler-agape.ngrok-free.dev/files/${fileInfo.id}/llm/?scan_id=${scanResult.dbScanId}`,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'ngrok-skip-browser-warning': 'true',
+                }
+              }
+            );
+
+            if (response.data && response.data.length > 0 && response.data[0].File_text) {
+              fileContent = response.data[0].File_text;
+              console.log(`[LLM Scan] Using disassembly from database for file ${fileInfo.id}`);
+            } else {
+              throw new Error('No assembly found in database');
+            }
+          } catch (asmError) {
+            console.log('[LLM Scan] Disassembly not found, reading file directly...');
+            // Fallback: read file directly
+            fileContent = fs.readFileSync(fileInfo.path, 'utf-8');
+          }
+        }
+
+        // Create form data for AI Server
+        const formData = new FormData();
+        const fileName = path.basename(fileInfo.path);
+        const fileBlob = Buffer.from(fileContent, 'utf-8');
+
+        console.log(`[LLM Scan] File content length: ${fileContent.length} bytes`);
+        console.log(`[LLM Scan] File content preview: ${fileContent.substring(0, 200)}...`);
+
+        formData.append('file', fileBlob, {
+          filename: fileName,
+          contentType: 'text/plain'
+        });
+
+        // Send to AI Server for analysis
+        console.log(`[LLM Scan] Sending file to AI Server: ${fileName}`);
+        console.log(`[LLM Scan] AI Server URL: ${AI_SERVER_URL}/analyze`);
+
+        const aiResponse = await axios.post(`${AI_SERVER_URL}/analyze`, formData, {
+          headers: {
+            ...formData.getHeaders()
+          },
+          timeout: 120000 // 2 minute timeout
+        });
+
+        console.log('[LLM Scan] AI Server response received');
+        console.log('[LLM Scan] AI Server response:', JSON.stringify(aiResponse.data, null, 2));
+
+        // Extract task_id from response
+        const taskId = aiResponse.data.task_id;
+        if (!taskId) {
+          throw new Error('No task_id received from AI Server');
+        }
+
+        console.log(`[LLM Scan] Received task_id: ${taskId}, polling for results...`);
+
+        // Poll for results
+        let result: any = null;
+        const maxPollingAttempts = 60; // 60 attempts
+        const pollingInterval = 2000; // 2 seconds
+
+        for (let attempt = 0; attempt < maxPollingAttempts; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, pollingInterval));
+
+          try {
+            console.log(`[LLM Scan] Polling attempt ${attempt + 1}/${maxPollingAttempts}...`);
+            const reportResponse = await axios.get(`${AI_SERVER_URL}/report/${taskId}`, {
+              timeout: 10000
+            });
+
+            if (reportResponse.data) {
+              result = reportResponse.data;
+              console.log('[LLM Scan] Analysis completed!');
+              console.log('[LLM Scan] Result:', JSON.stringify(result, null, 2));
+              break;
+            }
+          } catch (pollError: any) {
+            if (pollError.response?.status === 404) {
+              // Analysis still in progress, continue polling
+              console.log(`[LLM Scan] Analysis still in progress... (${attempt + 1}/${maxPollingAttempts})`);
+              continue;
+            } else {
+              // Other error, rethrow
+              throw pollError;
+            }
+          }
+        }
+
+        if (!result) {
+          throw new Error('Analysis timeout: No result received after polling');
+        }
+
+        fileResults[fileInfo.path] = {
+          fileName: fileName,
+          fileId: fileInfo.id,
+          isPqcVulnerable: result.is_pqc_vulnerable || false,
+          detectedAlgorithms: result.detected_algorithms || [],
+          confidenceScore: result.confidence_score || 0,
+          evidence: result.evidence || '',
+          recommendations: result.recommendations || ''
+        };
+
+        // Save LLM analysis result to database
+        try {
+          console.log(`[LLM Scan] Saving LLM analysis result to database for file ${fileInfo.id}`);
+          await axios.post(
+            `https://harper-abler-agape.ngrok-free.dev/files/${fileInfo.id}/llm_analysis/`,
+            {
+              scan_id: scanResult.dbScanId,
+              is_pqc_vulnerable: result.is_pqc_vulnerable || false,
+              detected_algorithms: (result.detected_algorithms || []).join(', '),
+              confidence_score: result.confidence_score || 0,
+              evidence: result.evidence || '',
+              recommendations: result.recommendations || ''
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true',
+              }
+            }
+          );
+          console.log(`[LLM Scan] LLM analysis result saved to database for file ${fileInfo.id}`);
+        } catch (dbError) {
+          console.error(`[LLM Scan] Error saving LLM analysis to database:`, dbError);
+          // Continue even if database save fails
+        }
+
+        // Aggregate results
+        if (result.is_pqc_vulnerable) {
+          overallVulnerable = true;
+        }
+
+        if (result.detected_algorithms && result.detected_algorithms.length > 0) {
+          allDetectedAlgorithms = [...new Set([...allDetectedAlgorithms, ...result.detected_algorithms])];
+        }
+
+        totalConfidence += (result.confidence_score || 0);
+
+        if (result.evidence) {
+          allEvidence.push(`[${fileName}]\n${result.evidence}`);
+        }
+
+        if (result.recommendations) {
+          allRecommendations.push(`[${fileName}]\n${result.recommendations}`);
+        }
+
+      } catch (fileError) {
+        console.error(`[LLM Scan] Error processing file ${fileInfo.path}:`, fileError);
+        if (axios.isAxiosError(fileError)) {
+          console.error('[LLM Scan] Axios error details:', {
+            message: fileError.message,
+            code: fileError.code,
+            response: fileError.response?.data,
+            status: fileError.response?.status
+          });
+        }
+        // Continue with other files
+        fileResults[fileInfo.path] = {
+          fileName: path.basename(fileInfo.path),
+          fileId: fileInfo.id,
+          isPqcVulnerable: false,
+          detectedAlgorithms: [],
+          confidenceScore: 0,
+          evidence: `Error analyzing file: ${fileError instanceof Error ? fileError.message : String(fileError)}`,
+          recommendations: 'Unable to provide recommendations due to analysis error'
+        };
+      }
+    }
+
+    // Calculate average confidence
+    const avgConfidence = filesToScan.length > 0 ? totalConfidence / filesToScan.length : 0;
+
+    // Build final result
+    const llmScanResult = {
+      isScanned: true,
+      isPqcVulnerable: overallVulnerable,
+      detectedAlgorithms: allDetectedAlgorithms,
+      confidenceScore: avgConfidence,
+      evidence: allEvidence.join('\n\n'),
+      recommendations: allRecommendations.join('\n\n'),
+      scannedAt: new Date().toISOString(),
+      fileResults: Object.keys(fileResults).length > 1 ? fileResults : undefined
+    };
+
+    console.log('[LLM Scan] LLM scan completed successfully');
+
+    return {
+      success: true,
+      data: llmScanResult
+    };
+
+  } catch (error) {
+    console.error('[LLM Scan] Error during LLM scan:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+});
+
+// Generate comprehensive report (static + dynamic + LLM)
+ipcMain.handle('generate-comprehensive-report', async (event, scanResult) => {
+  try {
+    console.log('[Comprehensive Report] Starting comprehensive report generation...');
+
+    // This will be implemented to include LLM scan results in the report
+    // For now, use the existing report generator with enhanced content
+
+    const saveDialog = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: `CryptoScanner_Comprehensive_Report_${scanResult.date}_${scanResult.time.replace(/:/g, '-')}.docx`,
+      filters: [
+        { name: 'Word Documents', extensions: ['docx'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+
+    if (saveDialog.canceled || !saveDialog.filePath) {
+      return { success: false, error: 'Save cancelled by user' };
+    }
+
+    console.log('[Comprehensive Report] Generating report to:', saveDialog.filePath);
+
+    // Generate report with LLM scan results included
+    const reportPath = await generateReport(scanResult, saveDialog.filePath);
+
+    console.log('[Comprehensive Report] Report generated successfully:', reportPath);
+
+    return {
+      success: true,
+      path: reportPath,
+      message: 'Comprehensive report generated successfully.'
+    };
+  } catch (error) {
+    console.error('[Comprehensive Report] Error generating report:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+});

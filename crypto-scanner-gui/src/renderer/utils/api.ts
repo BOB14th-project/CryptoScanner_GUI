@@ -386,3 +386,114 @@ export async function getLLMLog(fileId: number, scanId: number): Promise<ApiResp
     return { success: false, error: (error as Error).message };
   }
 }
+
+// ============= AI Server API Functions =============
+const AI_SERVER_URL = 'http://localhost:8000/api/v1';
+
+// LLM 스캔 분석 요청 (AI Server)
+export async function analyzeLLMScan(filePath: string): Promise<ApiResponse<any>> {
+  try {
+    const formData = new FormData();
+
+    // Read file and create blob
+    const fileContent = await window.electronAPI.readFileForLLM(filePath);
+    const blob = new Blob([fileContent], { type: 'application/octet-stream' });
+    const fileName = filePath.split('/').pop() || 'file';
+
+    formData.append('file', blob, fileName);
+
+    const response = await fetch(`${AI_SERVER_URL}/analyze`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error analyzing LLM scan:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+// LLM 스캔 결과 조회 (AI Server)
+export async function getLLMScanReport(reportId: string): Promise<ApiResponse<any>> {
+  try {
+    const response = await fetch(`${AI_SERVER_URL}/report/${reportId}`, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error getting LLM scan report:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+// LLM 스캔 결과 DB 저장
+export async function saveLLMScanResult(
+  fileId: number,
+  scanId: number,
+  llmScanData: {
+    isPqcVulnerable: boolean;
+    detectedAlgorithms: string[];
+    confidenceScore: number;
+    evidence: string;
+    recommendations: string;
+    reportId?: string;
+  }
+): Promise<ApiResponse<any>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/${fileId}/llm_scan_result/`, {
+      method: 'POST',
+      headers: DEFAULT_HEADERS,
+      body: JSON.stringify({
+        File_id: fileId,
+        Scan_id: scanId,
+        Is_pqc_vulnerable: llmScanData.isPqcVulnerable,
+        Detected_algorithms: llmScanData.detectedAlgorithms,
+        Confidence_score: llmScanData.confidenceScore,
+        Evidence: llmScanData.evidence,
+        Recommendations: llmScanData.recommendations,
+        Report_id: llmScanData.reportId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error saving LLM scan result:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+// LLM 스캔 결과 조회
+export async function getLLMScanResult(fileId: number, scanId: number): Promise<ApiResponse<any>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/${fileId}/llm_scan_result/?scan_id=${scanId}`, {
+      headers: DEFAULT_HEADERS,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error getting LLM scan result:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}
