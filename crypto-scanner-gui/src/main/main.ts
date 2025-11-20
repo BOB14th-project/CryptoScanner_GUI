@@ -42,6 +42,7 @@ const getEnvPaths = () => {
       // -> CryptoScanner.app/Contents/Resources/.env
       const contentsPath = path.join(path.dirname(appPath), '..');
       paths.push(path.join(contentsPath, 'Resources', '.env'));
+      paths.push(path.join(contentsPath, 'Resources', 'app', 'dist', 'main', '.env'));
       paths.push(path.join(contentsPath, '.env'));
 
       // Also try app.asar.unpacked
@@ -2476,16 +2477,16 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
               }
 
               console.log('Successfully saved scan results to database');
-              return dbFileIds;
+              return { dbFileIds, dbScanId: scanId };
             } catch (dbError) {
               console.error('Error saving to database:', dbError);
               // 데이터베이스 저장 실패 시에도 스캔 결과는 반환
-              return {};
+              return { dbFileIds: {}, dbScanId: undefined };
             }
           };
 
           // 데이터베이스 저장 (비동기로 실행하되 완료를 기다림)
-          const dbFileIds = await saveToDatabase();
+          const { dbFileIds, dbScanId } = await saveToDatabase();
 
           resolve({
             success: true,
@@ -2493,7 +2494,8 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
             detections: mergedDetections,
             nonPqcCount: mergedDetections.length,
             fileCount: new Set(mergedDetections.map(d => d.filePath)).size,
-            dbFileIds: dbFileIds
+            dbFileIds: dbFileIds,
+            dbScanId: dbScanId
           });
         } else {
           reject(new Error(errorOutput || 'Scan failed with code ' + code));

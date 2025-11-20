@@ -15,6 +15,7 @@ interface ScanResult {
   detections: Detection[];
   dbFileId?: number;
   dbFileIds?: Record<string, number>;
+  dbScanId?: number;
 }
 
 interface Detection {
@@ -545,9 +546,125 @@ export async function generateReport(scanResult: ScanResult, outputPath: string)
     fs.writeFileSync(outputPath, buf);
 
     console.log('Report generated successfully:', outputPath);
+
+    // 11. DB에 LLM_analysis 저장 (보고서 생성 성공 후)
+    try {
+      await saveLLMAnalysisToDatabase(scanResult, reportContent);
+    } catch (dbError) {
+      console.error('[DB] Failed to save LLM analysis to database:', dbError);
+      // DB 저장 실패는 보고서 생성 자체를 막지 않음
+    }
+
     return outputPath;
   } catch (error) {
     console.error('Error generating report:', error);
+    throw error;
+  }
+}
+
+/**
+ * DB에 LLM 분석 결과 저장
+ */
+async function saveLLMAnalysisToDatabase(
+  scanResult: ScanResult,
+  reportContent: {
+    scanDate: string;
+    scanTarget: string;
+    detailContent: string;
+    migrationGuide: string;
+  }
+): Promise<void> {
+  try {
+    // Determine file ID
+    let fileId: string | number = scanResult.id;
+
+    if (scanResult.dbFileIds && Object.keys(scanResult.dbFileIds).length > 0) {
+      if (scanResult.dbFileId) {
+        fileId = scanResult.dbFileId;
+      } else {
+        const firstFilePath = Object.keys(scanResult.dbFileIds)[0];
+        fileId = scanResult.dbFileIds[firstFilePath];
+      }
+    } else if (scanResult.dbFileId) {
+      fileId = scanResult.dbFileId;
+    }
+
+    // Determine scan ID - DB Scan ID가 없으면 파일에서 조회
+    let scanId = scanResult.dbScanId;
+
+    if (!scanId) {
+      console.warn('[DB] No dbScanId found in scanResult, fetching from file data...');
+      try {
+        // 파일 정보를 조회하여 기존 Scan ID를 가져옴
+        const fileResponse = await axios.get(
+          `${DB_API_BASE_URL}/files/${fileId}`,
+          {
+            headers: {
+              'ngrok-skip-browser-warning': 'true',
+            },
+          }
+        );
+
+        // 파일에 연결된 스캔이 있으면 첫 번째 스캔 ID 사용
+        if (fileResponse.data.scans && fileResponse.data.scans.length > 0) {
+          scanId = fileResponse.data.scans[0].Scan_id;
+          console.log('[DB] Found existing scan ID from file:', scanId);
+        } else {
+          // 스캔이 없으면 새로 생성
+          console.log('[DB] No existing scan found, creating new scan...');
+          const scanResponse = await axios.post(
+            `${DB_API_BASE_URL}/scans/`,
+            {},
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true',
+              },
+            }
+          );
+          scanId = scanResponse.data.Scan_id;
+          console.log('[DB] Created new scan with ID:', scanId);
+        }
+      } catch (error) {
+        console.error('[DB] Failed to get/create scan:', error);
+        throw new Error('Failed to determine scan ID for LLM analysis');
+      }
+    }
+
+    console.log(`[DB] Saving LLM analysis for file ID: ${fileId}, scan ID: ${scanId}`);
+
+    // LLM_analysis 데이터 생성 (전체 리포트 내용을 JSON으로 저장)
+    const llmAnalysisData = JSON.stringify({
+      scanDate: reportContent.scanDate,
+      scanTarget: reportContent.scanTarget,
+      detailContent: reportContent.detailContent,
+      migrationGuide: reportContent.migrationGuide,
+      generatedAt: new Date().toISOString(),
+    });
+
+    // DB API 호출 - scanId(정수) 사용
+    const response = await axios.post(
+      `${DB_API_BASE_URL}/files/${fileId}/llm_analysis/`,
+      {
+        File_id: fileId,
+        Scan_id: scanId,
+        LLM_analysis: llmAnalysisData,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+      }
+    );
+
+    console.log('[DB] LLM analysis saved successfully:', response.data);
+  } catch (error: any) {
+    console.error('[DB] Error saving LLM analysis:', error.message);
+    if (error.response) {
+      console.error('[DB] Error response:', error.response.data);
+      console.error('[DB] Error status:', error.response.status);
+    }
     throw error;
   }
 }
