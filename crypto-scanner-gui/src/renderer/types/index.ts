@@ -10,6 +10,7 @@ export interface ScanResult {
   detections: Detection[];
   dbFileId?: number; // Database file ID from API
   dbFileIds?: Record<string, number>; // Map of filePath to database file ID
+  dbScanId?: number; // Database scan ID from API
 }
 
 export interface Detection {
