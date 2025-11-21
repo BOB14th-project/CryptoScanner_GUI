@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import axios from 'axios';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
@@ -29,6 +30,7 @@ interface ScanResult {
   dbFileIds?: Record<string, number>;
   dbScanId?: number;
   llmScanResult?: LLMScanResult;
+  osEnvData?: string;
 }
 
 interface Detection {
@@ -238,6 +240,67 @@ function formatScanDate(date: string, time: string): string {
   }
 }
 
+function calculateSeverityCounts(detections: Detection[]): { high: number; mid: number; low: number; total: number } {
+  return detections.reduce(
+    (acc, detection) => {
+      const severity = (detection.severity || '').toLowerCase();
+
+      if (severity.includes('high') || severity.includes('critical')) {
+        acc.high += 1;
+      } else if (severity.includes('medium') || severity.includes('mid')) {
+        acc.mid += 1;
+      } else {
+        // Treat unknown/info/low as low severity by default
+        acc.low += 1;
+      }
+
+      acc.total += 1;
+      return acc;
+    },
+    { high: 0, mid: 0, low: 0, total: 0 }
+  );
+}
+
+function buildOsEnvData(scanResult: ScanResult, dbData: any): string {
+  const fromScanResult = scanResult.osEnvData;
+  if (typeof fromScanResult === 'string' && fromScanResult.trim()) {
+    return fromScanResult.trim();
+  }
+
+  const envParts: string[] = [];
+  const fileInfo = dbData?.file;
+  const metadata = fileInfo?.metadata || fileInfo?.meta || fileInfo;
+
+  if (metadata && typeof metadata === 'object') {
+    const keyMap = [
+      { key: 'os', label: 'OS' },
+      { key: 'os_name', label: 'OS' },
+      { key: 'os_version', label: 'OS Version' },
+      { key: 'osVersion', label: 'OS Version' },
+      { key: 'platform', label: 'Platform' },
+      { key: 'kernel', label: 'Kernel' },
+      { key: 'kernel_version', label: 'Kernel Version' },
+      { key: 'architecture', label: 'Architecture' },
+      { key: 'arch', label: 'Architecture' },
+      { key: 'environment', label: 'Environment' },
+      { key: 'env', label: 'Environment' },
+    ];
+
+    keyMap.forEach(({ key, label }) => {
+      const value = (metadata as any)[key];
+      if (value) {
+        envParts.push(`${label}: ${value}`);
+      }
+    });
+  }
+
+  if (!envParts.length) {
+    envParts.push(`Host: ${os.type()} ${os.release()} (${os.arch()})`);
+  }
+
+  return envParts.join('\n');
+}
+
 /**
  * Gemini API를 사용하여 보고서 내용 생성
  */
@@ -250,7 +313,16 @@ async function generateReportContent(
   scanTarget: string;
   detailContent: string;
   migrationGuide: string;
+  osEnvData: string;
+  findHighNum: number;
+  findMidNum: number;
+  findLowNum: number;
+  findAllNum: number;
 }> {
+  const severityCounts = calculateSeverityCounts(scanResult.detections);
+  const osEnvData = buildOsEnvData(scanResult, dbData);
+  const totalFindings = severityCounts.total || scanResult.nonPqcCount || 0;
+
   // Gemini API 클라이언트 가져오기
   const genAI = getGeminiClient();
 
@@ -260,7 +332,12 @@ async function generateReportContent(
       scanDate: formatScanDate(scanResult.date, scanResult.time),
       scanTarget: scanResult.filePath,
       detailContent: `총 ${scanResult.nonPqcCount}개의 Non-PQC 알고리즘이 발견되었습니다.\n\n발견된 알고리즘:\n${[...new Set(scanResult.detections.map(d => d.algorithm))].map(algo => `- ${algo}`).join('\n')}`,
-      migrationGuide: '양자 내성 암호(PQC)로의 전환을 권장합니다. NIST에서 표준화한 CRYSTALS-Kyber, CRYSTALS-Dilithium 등의 알고리즘 사용을 고려하세요.'
+      migrationGuide: '양자 내성 암호(PQC)로의 전환을 권장합니다. NIST에서 표준화한 CRYSTALS-Kyber, CRYSTALS-Dilithium 등의 알고리즘 사용을 고려하세요.',
+      osEnvData,
+      findHighNum: severityCounts.high,
+      findMidNum: severityCounts.mid,
+      findLowNum: severityCounts.low,
+      findAllNum: totalFindings
     };
   }
 
@@ -312,6 +389,8 @@ ${scanResult.llmScanResult.recommendations.substring(0, 2000)}${scanResult.llmSc
 - Scan Type: ${scanResult.type}
 - Target Path: ${scanResult.filePath}
 - Total Non-PQC Detections: ${scanResult.nonPqcCount}
+- Severity Count (H/M/L): ${severityCounts.high}/${severityCounts.mid}/${severityCounts.low}
+${osEnvData ? `- OS/Env: ${osEnvData.split('\n').join(' | ')}` : ''}
 ${scanResult.llmScanResult?.isScanned ? `- LLM Scan Performed: Yes\n- Overall Vulnerability: ${scanResult.llmScanResult.isPqcVulnerable ? 'High Risk' : 'Low Risk'}` : ''}
 
 **Detected Algorithms Summary:**
@@ -409,11 +488,21 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
         const parsedResponse = JSON.parse(jsonStr);
         console.log('[Gemini] Successfully parsed response');
 
+        const toNumber = (value: any, fallback: number) => {
+          const num = Number(value);
+          return Number.isFinite(num) ? num : fallback;
+        };
+
         return {
           scanDate: formatScanDate(scanResult.date, scanResult.time),
           scanTarget: parsedResponse.scanTarget || scanResult.filePath,
           detailContent: parsedResponse.detailContent || '분석 결과를 생성할 수 없습니다.',
-          migrationGuide: parsedResponse.migrationGuide || '마이그레이션 가이드를 생성할 수 없습니다.'
+          migrationGuide: parsedResponse.migrationGuide || '마이그레이션 가이드를 생성할 수 없습니다.',
+          osEnvData: parsedResponse.osEnvData || osEnvData,
+          findHighNum: toNumber(parsedResponse.findHighNum, severityCounts.high),
+          findMidNum: toNumber(parsedResponse.findMidNum, severityCounts.mid),
+          findLowNum: toNumber(parsedResponse.findLowNum, severityCounts.low),
+          findAllNum: toNumber(parsedResponse.findAllNum, totalFindings)
         };
       } catch (firstError) {
         console.log('[Gemini] First parse attempt failed, trying to save raw response');
@@ -491,6 +580,7 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
           const scanTarget = extractField('scanTarget', jsonStr);
           const detailContent = extractField('detailContent', jsonStr);
           const migrationGuide = extractField('migrationGuide', jsonStr);
+          const parsedOsEnv = extractField('osEnvData', jsonStr);
 
           if (scanTarget && detailContent && migrationGuide) {
             console.log('[Gemini] Successfully extracted fields using improved manual extraction');
@@ -498,7 +588,12 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
               scanDate: formatScanDate(scanResult.date, scanResult.time),
               scanTarget: scanTarget,
               detailContent: detailContent,
-              migrationGuide: migrationGuide
+              migrationGuide: migrationGuide,
+              osEnvData: parsedOsEnv || osEnvData,
+              findHighNum: severityCounts.high,
+              findMidNum: severityCounts.mid,
+              findLowNum: severityCounts.low,
+              findAllNum: totalFindings
             };
           } else {
             console.error('[Gemini] Manual extraction failed - missing fields:', {
@@ -526,7 +621,12 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
       scanDate: formatScanDate(scanResult.date, scanResult.time),
       scanTarget: scanResult.filePath,
       detailContent: `총 ${scanResult.nonPqcCount}개의 Non-PQC 알고리즘이 발견되었습니다.\n\n발견된 알고리즘:\n${[...new Set(scanResult.detections.map(d => d.algorithm))].map(algo => `- ${algo}`).join('\n')}\n\n각 알고리즘은 양자 컴퓨터 공격에 취약할 수 있으므로, PQC 알고리즘으로의 전환을 고려해야 합니다.`,
-      migrationGuide: `양자 내성 암호(PQC)로의 전환을 권장합니다.\n\n권장 대안:\n- 키 교환: CRYSTALS-Kyber (NIST 표준)\n- 디지털 서명: CRYSTALS-Dilithium, FALCON (NIST 표준)\n- 해시 기반 서명: SPHINCS+ (NIST 표준)\n\n전환 단계:\n1. 현재 사용 중인 암호 알고리즘 목록 작성\n2. PQC 대안 알고리즘 선택\n3. 테스트 환경에서 마이그레이션 수행\n4. 성능 및 호환성 검증\n5. 단계적 프로덕션 적용`
+      migrationGuide: `양자 내성 암호(PQC)로의 전환을 권장합니다.\n\n권장 대안:\n- 키 교환: CRYSTALS-Kyber (NIST 표준)\n- 디지털 서명: CRYSTALS-Dilithium, FALCON (NIST 표준)\n- 해시 기반 서명: SPHINCS+ (NIST 표준)\n\n전환 단계:\n1. 현재 사용 중인 암호 알고리즘 목록 작성\n2. PQC 대안 알고리즘 선택\n3. 테스트 환경에서 마이그레이션 수행\n4. 성능 및 호환성 검증\n5. 단계적 프로덕션 적용`,
+      osEnvData,
+      findHighNum: severityCounts.high,
+      findMidNum: severityCounts.mid,
+      findLowNum: severityCounts.low,
+      findAllNum: totalFindings
     };
   }
 }
@@ -574,6 +674,11 @@ export async function generateReport(scanResult: ScanResult, outputPath: string)
         scanTarget: reportContent.scanTarget,
         detailContent: reportContent.detailContent,
         migrationGuide: reportContent.migrationGuide,
+        osEnvData: reportContent.osEnvData,
+        findHighNum: reportContent.findHighNum,
+        findMidNum: reportContent.findMidNum,
+        findLowNum: reportContent.findLowNum,
+        findAllNum: reportContent.findAllNum,
       });
     } catch (error: any) {
       console.error('Template rendering error:', error);
@@ -623,6 +728,11 @@ async function saveLLMAnalysisToDatabase(
     scanTarget: string;
     detailContent: string;
     migrationGuide: string;
+    osEnvData: string;
+    findHighNum: number;
+    findMidNum: number;
+    findLowNum: number;
+    findAllNum: number;
   }
 ): Promise<void> {
   try {
@@ -690,6 +800,11 @@ async function saveLLMAnalysisToDatabase(
       scanTarget: reportContent.scanTarget,
       detailContent: reportContent.detailContent,
       migrationGuide: reportContent.migrationGuide,
+      osEnvData: reportContent.osEnvData,
+      findHighNum: reportContent.findHighNum,
+      findMidNum: reportContent.findMidNum,
+      findLowNum: reportContent.findLowNum,
+      findAllNum: reportContent.findAllNum,
       generatedAt: new Date().toISOString(),
     });
 
