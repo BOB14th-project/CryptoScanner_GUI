@@ -184,9 +184,18 @@ const App: React.FC = () => {
             progress={appState.scanProgress}
             scanType={currentScanType}
             onNavigate={navigateToPage}
-            onCancel={() => {
-              setScanning(false);
-              navigateToPage('main');
+            onCancel={async () => {
+              try {
+                if (window.electronAPI) {
+                  await window.electronAPI.cancelScan();
+                }
+                setScanning(false);
+                navigateToPage('main');
+              } catch (error) {
+                console.error('Failed to cancel scan:', error);
+                setScanning(false);
+                navigateToPage('main');
+              }
             }}
           />
         );

@@ -1499,7 +1499,11 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
         detectionCount: 0
       };
 
-      scannerProcess = spawn(scannerPath, [scanOptions.path], {
+      // Determine scanner arguments based on scan type
+      const scannerArgs = scanOptions.type === 'full' ? ['--full-scan'] : [scanOptions.path];
+      console.log('Scanner arguments:', scannerArgs);
+
+      scannerProcess = spawn(scannerPath, scannerArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: effectiveCwd,
         windowsHide: false, // Show console window for debugging
@@ -1524,9 +1528,46 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
             console.log(`Processing line: "${line}"`);
 
             // Parse different output types from CryptoScanner
-            if (line.startsWith('PROGRESS:')) {
+            if (line.startsWith('FULLSCAN:')) {
+              // Handle full scan messages
               const parts = line.split(':');
-              if (parts[1] === 'FILE') {
+              if (parts[1] === 'START') {
+                console.log('Full scan started');
+              } else if (parts[1] === 'ROOT') {
+                currentFile = `Scanning ${parts[2]}...`;
+                console.log('Scanning root:', parts[2]);
+              } else if (parts[1] === 'COMPLETE') {
+                scannedFiles = totalFiles;
+                console.log('Full scan completed');
+              }
+            } else if (line.startsWith('PROGRESS:')) {
+              const parts = line.split(':');
+              if (parts[1] === 'FULL') {
+                // PROGRESS:FULL:filesDone:filesTotal:bytesDone:bytesTotal:elapsed:remaining:currentFile
+                scannedFiles = parseInt(parts[2]) || 0;
+                totalFiles = parseInt(parts[3]) || 0;
+                const elapsed = parseInt(parts[6]) || 0;
+                const remaining = parseInt(parts[7]) || 0;
+                currentFile = parts.slice(8).join(':') || 'Scanning...';
+
+                trackExecutableCandidate(currentFile);
+
+                // Send detailed progress with time estimates
+                const progressData = {
+                  type: 'progress',
+                  currentFile: currentFile,
+                  filesDone: scannedFiles,
+                  filesTotal: totalFiles,
+                  percentage: totalFiles > 0 ? Math.round((scannedFiles / totalFiles) * 100) : 0,
+                  detectionCount: detections.length,
+                  timeElapsed: elapsed,
+                  timeRemaining: remaining
+                };
+                console.log('Full scan progress:', progressData);
+                mainWindow.webContents.send('scan-progress', progressData);
+                lastProgressSnapshot = progressData;
+                continue; // Skip the normal progress handling below
+              } else if (parts[1] === 'FILE') {
                 currentFile = parts[2];
                 scannedFiles = parseInt(parts[3]) || 0;
                 totalFiles = parseInt(parts[4]) || 1;
@@ -1717,8 +1758,10 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
         }
 
         // 실행 파일이 스캔 대상에 포함된 경우 동적 탐지 실행
+        // Full Scan의 경우 동적 탐지를 건너뜀 (Quick Scan만 동적 탐지 수행)
         let dynamicDetections: any[] = [];
-        if (code === 0) {
+        if (code === 0 && scanOptions.type !== 'full') {
+          console.log(`Dynamic analysis enabled for scan type: ${scanOptions.type}`);
           emitProgress('Running dynamic analysis...', detections.length);
           try {
             const fs = require('fs');
@@ -1778,6 +1821,8 @@ ipcMain.handle('start-scan', async (event, scanOptions) => {
           } catch (error) {
             console.error('Failed to run dynamic analysis:', error);
           }
+        } else if (code === 0 && scanOptions.type === 'full') {
+          console.log('Dynamic analysis skipped for Full Scan (type: full)');
         }
 
         const detectionKey = (d: any) => `${d.filePath || ''}:${d.algorithm || 'Unknown'}`;

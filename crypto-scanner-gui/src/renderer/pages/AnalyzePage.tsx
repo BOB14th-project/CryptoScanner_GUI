@@ -23,6 +23,11 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
   const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
   const [isLLMScanning, setIsLLMScanning] = useState<boolean>(false);
 
+  // Format number with commas
+  const formatNumber = (num: number): string => {
+    return num.toLocaleString('en-US');
+  };
+
   // Load patterns.json to get algorithm descriptions
   useEffect(() => {
     const loadAlgorithmDescriptions = async () => {
@@ -1141,7 +1146,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
               fontWeight: 700,
               fontSize: '32px',
               color: '#FFFFFF'
-            }}>{resultData.fileCount}</div>
+            }}>{formatNumber(resultData.fileCount)}</div>
           </div>
         </div>
 

@@ -75,6 +75,7 @@
     },
     "files": [
       "dist/**/*",
+      "!dist/main/result/**/*",
       "src/renderer/assets/**/*",
       "../.env"
     ],
@@ -103,7 +104,13 @@
     "mac": {
       "icon": "src/renderer/assets/icon.icns",
       "category": "public.app-category.developer-tools",
-      "identity": null
+      "identity": null,
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["arm64"]
+        }
+      ]
     },
     "win": {
       "icon": "src/renderer/assets/icon.ico",

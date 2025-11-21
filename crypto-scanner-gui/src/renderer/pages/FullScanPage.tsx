@@ -18,11 +18,6 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
   const [error, setError] = React.useState<string | null>(null);
 
   const handleStartScan = async () => {
-    // Temporarily disable FULL SCAN functionality
-    alert('Full scan functionality is temporarily disabled. Please use Quick Scan instead.');
-    return;
-
-    /*
     try {
       setError(null);
       onStartScan(true);
@@ -38,7 +33,7 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
         type: 'full'
       });
 
-      if (scanResult.success) {
+      if (scanResult.success || scanResult.detections) {
         const now = new Date();
         const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
         const result: ScanResult = {
@@ -46,13 +41,13 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
           date: localDate.toISOString().split('T')[0],
           time: now.toISOString(),
           type: 'FULL_SCAN',
-          filePath: '/',
+          filePath: 'Full System Scan',
           nonPqcCount: scanResult.nonPqcCount || 0,
           fileCount: scanResult.fileCount || 0,
           riskLevel: scanResult.nonPqcCount > 100 ? 'High' : scanResult.nonPqcCount > 20 ? 'Medium' : 'Low',
           detections: scanResult.detections || [],
-          dbFileIds: scanResult.dbFileIds, // Add database file IDs from scan result
-          dbScanId: scanResult.dbScanId // Add database scan ID from scan result
+          dbFileIds: scanResult.dbFileIds,
+          dbScanId: scanResult.dbScanId
         };
 
         onScanComplete(result);
@@ -67,7 +62,6 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
       onNavigate('full-scan');
       setError(error instanceof Error ? error.message : 'Unknown error occurred');
     }
-    */
   };
 
   return (
@@ -291,6 +285,24 @@ const FullScanPage: React.FC<FullScanPageProps> = ({
             </p>
           </div>
 
+          {/* Error Display */}
+          {error && (
+            <div style={{
+              padding: '12px',
+              background: 'rgba(255, 100, 100, 0.2)',
+              border: '1px solid rgba(255, 100, 100, 0.4)',
+              borderRadius: '12px',
+              maxWidth: '500px'
+            }}>
+              <span style={{
+                fontFamily: 'SF Pro',
+                fontSize: '14px',
+                color: '#FFCCCC'
+              }}>
+                {error}
+              </span>
+            </div>
+          )}
 
           {/* Scan Button */}
           <button

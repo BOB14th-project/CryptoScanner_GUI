@@ -18,6 +18,11 @@ const ResultPage: React.FC<ResultPageProps> = ({
   console.log('ResultPage received scanResults:', scanResults);
   const [selectedDate, setSelectedDate] = useState<string>('');
 
+  // Format number with commas
+  const formatNumber = (num: number): string => {
+    return num.toLocaleString('en-US');
+  };
+
   // Group results by date and sort by most recent
   const groupedResults = useMemo(() => {
     const groups: { [date: string]: ScanResult[] } = {};
@@ -347,7 +352,7 @@ const ResultPage: React.FC<ResultPageProps> = ({
                         fontFamily: 'SF Pro',
                         fontSize: '17px',
                         color: '#FFFFFF'
-                      }}>Non-PQC: {result.nonPqcCount}</span>
+                      }}>Non-PQC: {formatNumber(result.nonPqcCount)}</span>
                     </div>
                   </div>
 

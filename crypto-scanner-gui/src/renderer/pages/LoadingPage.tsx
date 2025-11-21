@@ -324,6 +324,50 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
             </div>
           </div>
 
+          {/* Cancel Button - Top Right */}
+          <div style={{
+            position: 'absolute',
+            right: 'clamp(30px, 4vh, 40px)',
+            top: 'clamp(30px, 4vh, 40px)'
+          }}>
+            <button
+              onClick={onCancel}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '12px 24px',
+                gap: '8px',
+                background: 'linear-gradient(0deg, rgba(200, 50, 50, 0.3), rgba(200, 50, 50, 0.3)), rgba(180, 80, 80, 0.5)',
+                backgroundBlendMode: 'normal, overlay',
+                boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF',
+                backdropFilter: 'blur(10px)',
+                borderRadius: '999px',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0px 10px 16px rgba(0, 0, 0, 0.12), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0px 8px 12px rgba(0, 0, 0, 0.08), inset 2px 2px 2px -2px #FFFFFF, inset -2px -2px 2px -2px #FFFFFF';
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M6 18L18 6M6 6l12 12" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <span style={{
+                fontFamily: 'SF Pro Rounded',
+                fontWeight: 600,
+                fontSize: '14px',
+                color: '#FFFFFF'
+              }}>Cancel</span>
+            </button>
+          </div>
+
         </div>
       </div>
 

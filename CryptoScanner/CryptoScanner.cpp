@@ -838,18 +838,52 @@ void CryptoScanner::scanPathLikeAntivirus(
 ) {
     cancelCb = isCancelled;
     activeOpt = opt;
-    if (rootPath == "/" && activeOpt.profile == ScanProfile::Default) {
-        activeOpt.profile = ScanProfile::InstitutionStrict;
-        activeOpt.excludeSystemDirs = true;
-        activeOpt.excludeDevDirs = true;
-        activeOpt.jarMaxEntryJava = 0;
-        activeOpt.jarMaxEntryClass = 0;
-        activeOpt.jarMaxTotalUncomp = 0;
-        activeOpt.jarMaxEntries = 0;
-    }
+    // Don't auto-apply InstitutionStrict for root path - let main_gui_cli.cpp control the profile
     auto shouldSkipByProfile = [&](const fs::path& p) -> bool {
         std::string s = p.string();
         if (s == "/") return false;
+
+        // macOS-specific fast exclusions (check first for performance)
+        #ifdef __APPLE__
+        if (pathStartsWith(s, "/System")) return true;
+        if (pathStartsWith(s, "/Library/Caches")) return true;
+        if (pathStartsWith(s, "/private/var/db")) return true;
+        if (pathStartsWith(s, "/private/var/vm")) return true;
+        if (pathStartsWith(s, "/private/var/folders")) return true;
+        if (pathStartsWith(s, "/Volumes")) return true;
+        if (pathStartsWith(s, "/cores")) return true;
+        if (pathStartsWith(s, "/.Spotlight-V100")) return true;
+        if (pathStartsWith(s, "/.fseventsd")) return true;
+        if (pathStartsWith(s, "/.DocumentRevisions-V100")) return true;
+        if (pathStartsWith(s, "/.TemporaryItems")) return true;
+        if (pathStartsWith(s, "/.Trashes")) return true;
+        if (pathStartsWith(s, "/private/tmp")) return true;
+        if (pathStartsWith(s, "/private/var/tmp")) return true;
+
+        // User-specific exclusions (very slow directories)
+        if (s.find("/Library/Application Support/") != std::string::npos) return true;
+        if (s.find("/Library/Caches/") != std::string::npos) return true;
+        if (s.find("/Library/Logs/") != std::string::npos) return true;
+        if (s.find("/Library/Mail/") != std::string::npos) return true;
+        if (s.find("/Library/Safari/") != std::string::npos) return true;
+        if (s.find("/.Trash/") != std::string::npos) return true;
+        if (s.find("/node_modules/") != std::string::npos) return true;
+        if (s.find("/.git/") != std::string::npos) return true;
+        if (s.find("/.npm/") != std::string::npos) return true;
+        if (s.find("/.cache/") != std::string::npos) return true;
+        if (s.find("/__pycache__/") != std::string::npos) return true;
+        if (s.find("/.vscode/") != std::string::npos) return true;
+        if (s.find("/.cargo/") != std::string::npos) return true;
+        if (s.find("/.rustup/") != std::string::npos) return true;
+        if (s.find("/.m2/") != std::string::npos) return true;
+        if (s.find("/.gradle/") != std::string::npos) return true;
+
+        // Media libraries (huge and irrelevant)
+        if (s.find("/Photos Library.photoslibrary/") != std::string::npos) return true;
+        if (s.find("/iTunes/") != std::string::npos) return true;
+        if (s.find("/Music/iTunes/") != std::string::npos) return true;
+        #endif
+
         if (activeOpt.profile == ScanProfile::InstitutionStrict || activeOpt.excludeSystemDirs) {
             if (pathStartsWith(s, "/proc")) return true;
             if (pathStartsWith(s, "/sys")) return true;
@@ -875,23 +909,44 @@ void CryptoScanner::scanPathLikeAntivirus(
         return false;
     };
     std::vector<std::string> files;
+    std::atomic<std::uint64_t> filesCollected{0};
+    // No MAX_FILES limit - scan all target files without any limit
+    auto isTargetFile = [&](const std::string& s, const std::string& ext) -> bool {
+        // Priority 1: Certificates and key files (highest priority for crypto analysis)
+        if (isCertOrKeyExt(ext) || isLikelyPem(s)) return true;
+
+        // Priority 2: Source code files (likely to contain crypto implementations)
+        if (ext == ".c" || ext == ".cc" || ext == ".cpp" || ext == ".cxx" ||
+            ext == ".h" || ext == ".hpp" || ext == ".hh" ||
+            ext == ".py" || ext == ".java" || ext == ".go" || ext == ".rs") return true;
+
+        // Priority 3: Compiled code (executables and libraries)
+        if (ext == ".class" || isJarLikeExt(ext)) return true;
+        if (ext == ".so" || ext == ".dll" || ext == ".exe" || ext == ".dylib" ||
+            ext == ".a" || ext == ".o" || isVersionedSoName(s)) return true;
+
+        // Skip slow quickIsExecutableByHeader check for performance
+        return false;
+    };
+
     auto pushCandidate = [&](const fs::path& p) {
         std::string s = p.string();
         const std::string ext = lowercaseExt(s);
-        bool isCandidate = false;
-        if (isCertOrKeyExt(ext) || isLikelyPem(s)) isCandidate = true;
-        else if (ext == ".c" || ext == ".cc" || ext == ".cpp" || ext == ".cxx" || ext == ".h" || ext == ".hpp" || ext == ".hh") isCandidate = true;
-        else if (ext == ".py" || ext == ".java") isCandidate = true;
-        else if (ext == ".class") isCandidate = true;
-        else if (isJarLikeExt(ext)) isCandidate = true;
-        else if (isVersionedSoName(s) || ext == ".so" || ext == ".dll" || ext == ".exe" || ext == ".a" || ext == ".ld" || quickIsExecutableByHeader(s)) isCandidate = true;
-        if (!isCandidate) return;
+
+        if (!isTargetFile(s, ext)) return;
+
+        // Skip very large files (> 100MB) - unlikely to be crypto source/config
+        std::error_code ec;
+        auto fileSize = fs::file_size(p, ec);
+        if (!ec && fileSize > 100 * 1024 * 1024) return;
+
         if (!activeOpt.includeGlobs.empty()) {
             if (!globMatches(s, activeOpt.includeGlobs)) return;
         }
         if (shouldSkipByProfile(p)) return;
         if (globMatches(s, activeOpt.excludeGlobs)) return;
         files.push_back(s);
+        filesCollected.fetch_add(1);
     };
     std::vector<fs::path> roots;
     if (activeOpt.profile == ScanProfile::InstitutionStrict && rootPath == "/") {
@@ -901,21 +956,106 @@ void CryptoScanner::scanPathLikeAntivirus(
         roots.push_back(rootPath);
     }
     std::error_code ec;
+
+    // Phase 1: Collect all candidate files using fast system 'find' command
+#if defined(__APPLE__) || defined(__linux__)
+    // Use system 'find' command for much faster file discovery
+    std::cerr << "[CryptoScanner] Using 'find' command for fast file collection..." << std::endl;
+
+    for (const auto& r : roots) {
+        if (isCancelled && isCancelled()) break;
+
+        std::string rootStr = r.string();
+        std::cerr << "[CryptoScanner] Searching in: " << rootStr << std::endl;
+
+        // Build find command with exclusions - simpler approach
+        std::ostringstream findCmd;
+        findCmd << "find '" << rootStr << "' -type f";
+
+        // Add exclusions first (prune directories)
+        findCmd << " \\( -path '*/System/*' -o -path '*/Library/Caches/*' -o -path '*/Library/Application Support/*'";
+        findCmd << " -o -path '*/private/var/db/*' -o -path '*/private/var/vm/*' -o -path '*/private/var/folders/*'";
+        findCmd << " -o -path '*/Volumes/*' -o -path '*/cores/*' -o -path '*/.Spotlight-V100/*' -o -path '*/.fseventsd/*'";
+        findCmd << " -o -path '*/.DocumentRevisions-V100/*' -o -path '*/.TemporaryItems/*' -o -path '*/.Trashes/*' -o -path '*/.Trash/*'";
+        findCmd << " -o -path '*/node_modules/*' -o -path '*/.git/*' -o -path '*/.npm/*' -o -path '*/.cache/*' -o -path '*/__pycache__/*'";
+        findCmd << " -o -path '*/.vscode/*' -o -path '*/.cargo/*' -o -path '*/.rustup/*' -o -path '*/.m2/*' -o -path '*/.gradle/*'";
+        findCmd << " -o -path '*/Photos Library.photoslibrary/*' -o -path '*/iTunes/*' -o -path '*/Music/iTunes/*'";
+        findCmd << " -o -path '*/Pictures/*' -o -path '*/Music/*' -o -path '*/Movies/*' -o -path '*/Desktop/*' -o -path '*/Downloads/*' -o -path '*/Documents/*'";
+        findCmd << " -o -path '/proc/*' -o -path '/sys/*' -o -path '/dev/*' -o -path '/run/*' -o -path '/tmp/*' -o -path '*/tmp/*'";
+        findCmd << " \\) -prune -o -type f";
+
+        // Add file extension filters
+        findCmd << " \\( -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.cxx' -o -name '*.h' -o -name '*.hpp' -o -name '*.hh'";
+        findCmd << " -o -name '*.py' -o -name '*.java' -o -name '*.go' -o -name '*.rs'";
+        findCmd << " -o -name '*.class' -o -name '*.jar' -o -name '*.zip' -o -name '*.war' -o -name '*.ear' -o -name '*.apk' -o -name '*.aar' -o -name '*.jmod'";
+        findCmd << " -o -name '*.so' -o -name '*.so.*' -o -name '*.dll' -o -name '*.exe' -o -name '*.dylib' -o -name '*.a' -o -name '*.o'";
+        findCmd << " -o -name '*.cer' -o -name '*.crt' -o -name '*.der' -o -name '*.pem' -o -name '*.p7b' -o -name '*.p7c'";
+        findCmd << " -o -name '*.pfx' -o -name '*.p12' -o -name '*.key' -o -name '*.pub' -o -name '*.csr'";
+        findCmd << " \\) -size -100M -print 2>/dev/null";
+
+        std::string cmdStr = findCmd.str();
+        std::cerr << "[CryptoScanner] Executing find command..." << std::endl;
+
+        FILE* pipe = popen(cmdStr.c_str(), "r");
+        if (pipe) {
+            char buffer[4096];
+            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                if (isCancelled && isCancelled()) break;
+                std::string path = buffer;
+                // Remove trailing newline
+                if (!path.empty() && path.back() == '\n') path.pop_back();
+                if (!path.empty()) {
+                    files.push_back(path);
+                    filesCollected.fetch_add(1);
+
+                    // Progress feedback every 1000 files
+                    if (filesCollected.load() % 1000 == 0) {
+                        std::cerr << "[CryptoScanner] Collected " << filesCollected.load() << " files..." << std::endl;
+                    }
+                }
+            }
+            pclose(pipe);
+        } else {
+            std::cerr << "[CryptoScanner] ERROR: Failed to execute find command!" << std::endl;
+        }
+    }
+
+    std::cerr << "[CryptoScanner] File collection complete. Total files: " << files.size() << std::endl;
+#else
+    // Windows: use std::filesystem (find command not available)
     auto addFromRoot = [&](const fs::path& r) {
         if (fs::is_regular_file(r, ec)) { pushCandidate(r); return; }
         if (!fs::is_directory(r, ec)) return;
         if (activeOpt.recurse) {
-            for (fs::recursive_directory_iterator it(r, fs::directory_options::skip_permission_denied, ec), end; it != end; ++it) {
-                const auto& de = *it;
-                if (isCancelled && isCancelled()) break;
-                if (de.is_directory(ec)) {
-                    if (shouldSkipByProfile(de.path())) it.disable_recursion_pending();
-                    continue;
+            try {
+                for (fs::recursive_directory_iterator it(r, fs::directory_options::skip_permission_denied, ec), end; it != end;) {
+                    std::error_code iter_ec;
+                    const auto& de = *it;
+                    if (isCancelled && isCancelled()) break;
+                    if (de.is_directory(iter_ec)) {
+                        if (shouldSkipByProfile(de.path())) it.disable_recursion_pending();
+                        try { ++it; } catch (const std::exception& e) {
+                            try { it.disable_recursion_pending(); ++it; } catch (...) { break; }
+                        }
+                        continue;
+                    }
+                    if (de.is_symlink(iter_ec)) {
+                        try { ++it; } catch (...) { break; }
+                        continue;
+                    }
+                    if (!de.is_regular_file(iter_ec)) {
+                        try { ++it; } catch (...) { break; }
+                        continue;
+                    }
+                    if (shouldSkipByProfile(de.path().parent_path())) {
+                        try { ++it; } catch (...) { break; }
+                        continue;
+                    }
+                    pushCandidate(de.path());
+                    try { ++it; } catch (...) { break; }
                 }
-                if (de.is_symlink(ec)) continue;
-                if (!de.is_regular_file(ec)) continue;
-                if (shouldSkipByProfile(de.path().parent_path())) continue;
-                pushCandidate(de.path());
+            } catch (const std::exception& e) {
+                return;
             }
         } else {
             for (fs::directory_iterator it(r, ec), end; it != end; ++it) {
@@ -925,15 +1065,21 @@ void CryptoScanner::scanPathLikeAntivirus(
             }
         }
     };
+
     for (const auto& r : roots) addFromRoot(r);
+#endif
+
+    // Phase 2: Prepare for scanning (skip total size calculation for speed)
     std::uint64_t totalFiles = files.size();
-    std::uint64_t totalBytes = 0;
-    for (const auto& f : files) totalBytes += (std::uint64_t)getFileSizeSafe(f);
+    std::uint64_t totalBytes = 0; // Estimated, will be calculated on-the-fly
+
+    // Phase 3: Scan files with multi-threading
     std::atomic<std::uint64_t> filesDone{0};
     std::atomic<std::uint64_t> bytesDone{0};
     std::mutex cbMutex;
     const unsigned int th = std::min(32u, std::max(2u, std::thread::hardware_concurrency() * 2));
     std::atomic<std::size_t> idx{0};
+
     auto worker = [&]() {
         while (true) {
             if (isCancelled && isCancelled()) break;
@@ -953,6 +1099,7 @@ void CryptoScanner::scanPathLikeAntivirus(
             bytesDone.fetch_add(sz);
         }
     };
+
     std::vector<std::thread> pool;
     for (unsigned int t = 0; t < th; t++) pool.emplace_back(worker);
     for (auto& t : pool) t.join();
