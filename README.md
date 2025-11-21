@@ -34,6 +34,10 @@ CryptoScanner_GUI/
 │           ├── types/       # TypeScript 타입 정의
 │           └── utils/       # 유틸리티 파일
 │
+├── LLM-Report/              # LLM Orchestration 리포트 형식
+│
+├── .env/
+│
 └── mac-arm64 / linux-arm, linux-amd / win-amd  # 빌드 후 생성되는 CryptoScanner 실행파일
 ```
 
@@ -254,7 +258,7 @@ Google_API_KEY=[API KEY]
 
 - **RESULT**: 이전 스캔 기록 조회 (날짜별 정리, CSV 다운로드 가능)
 - **QUICK SCAN**: 개별 파일/폴더 스캔 (최대 5분 소요)
-- **FULL SCAN**: 전체 시스템 스캔 (최소 20분 소요) **[⚠️ 기능 사용 일시정지]**
+- **FULL SCAN**: 전체 시스템 스캔 (약 3시간 소요)
 
 ### **3️⃣ Result Page**
 
@@ -275,7 +279,7 @@ Google_API_KEY=[API KEY]
 - 우측: 선택된 스캔 타입별 인터페이스
 - 파일/폴더 선택 후 스캔 시작
 
-### **6️⃣ Full Scan Page** [기능 사용 일시정지]
+### **6️⃣ Full Scan Page**
 
 - 전체 시스템 스캔 인터페이스
 - 스캔 시작 버튼만 제공
