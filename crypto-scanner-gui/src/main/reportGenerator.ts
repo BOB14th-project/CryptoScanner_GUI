@@ -302,6 +302,39 @@ function buildOsEnvData(scanResult: ScanResult, dbData: any): string {
 }
 
 /**
+ * 탐지 내역 상세 문자열 생성 (LLM 없이 바로 사용)
+ */
+function buildDetectionDetailContent(detections: Detection[]): string {
+  const total = detections.length;
+  const algoCountMap = detections.reduce<Record<string, number>>((acc, d) => {
+    const key = d.algorithm || 'Unknown';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  const lines = detections.map((d) => {
+    const algorithm = d.algorithm || 'Unknown';
+    const location = d.offset !== undefined && d.offset !== null
+      ? `${d.filePath || '경로없음'}:${d.offset}`
+      : d.filePath || '위치 정보 없음';
+    const severity = d.severity || 'Unknown';
+    return `${algorithm} / ${location} / ${severity}`;
+  });
+
+  const algoSummary = Object.entries(algoCountMap)
+    .map(([algo, count]) => `${algo} (${count}건)`)
+    .join(', ');
+
+  return [
+    `총 ${total}개의 Non-PQC 알고리즘이 발견되었습니다.`,
+    algoSummary ? `알고리즘 요약: ${algoSummary}` : '',
+    '',
+    '탐지 내역:',
+    ...lines
+  ].filter(Boolean).join('\n');
+}
+
+/**
  * Gemini API를 사용하여 보고서 내용 생성
  */
 async function generateReportContent(
@@ -322,6 +355,7 @@ async function generateReportContent(
   const severityCounts = calculateSeverityCounts(scanResult.detections);
   const osEnvData = buildOsEnvData(scanResult, dbData);
   const totalFindings = severityCounts.total || scanResult.nonPqcCount || 0;
+  const detectionDetailContent = buildDetectionDetailContent(scanResult.detections);
 
   // Gemini API 클라이언트 가져오기
   const genAI = getGeminiClient();
@@ -331,8 +365,8 @@ async function generateReportContent(
     return {
       scanDate: formatScanDate(scanResult.date, scanResult.time),
       scanTarget: scanResult.filePath,
-      detailContent: `총 ${scanResult.nonPqcCount}개의 Non-PQC 알고리즘이 발견되었습니다.\n\n발견된 알고리즘:\n${[...new Set(scanResult.detections.map(d => d.algorithm))].map(algo => `- ${algo}`).join('\n')}`,
-      migrationGuide: '양자 내성 암호(PQC)로의 전환을 권장합니다. NIST에서 표준화한 CRYSTALS-Kyber, CRYSTALS-Dilithium 등의 알고리즘 사용을 고려하세요.',
+      detailContent: detectionDetailContent,
+      migrationGuide: '양자 내성 암호(PQC)로의 전환을 권장합니다. CRYSTALS-Kyber, CRYSTALS-Dilithium, FALCON, SPHINCS+ 같은 NIST 표준 PQC를 검토하시고, 주요 의존 코드 경로부터 단계적으로 교체·검증하세요.',
       osEnvData,
       findHighNum: severityCounts.high,
       findMidNum: severityCounts.mid,
@@ -408,44 +442,16 @@ ${llmScanInfo}
 
 **IMPORTANT INSTRUCTIONS:**
 
-1. **스캔 대상 (Scan Target):**
-   - Return ONLY the file path: "${scanResult.filePath}"
-   - Do NOT add any additional text or descriptions
-
-2. **상세 내용 (Detailed Content):**
-   Create a COMPREHENSIVE, DETAILED analysis with:
-   - **개요 (Overview)**: Summary of what was scanned and overall findings
-   - **탐지된 알고리즘 상세 (Detected Algorithms Details)**: For EACH algorithm:
-     * 알고리즘 설명 (What it is and how it works)
-     * 보안 위험성 (Security risks, especially against quantum computers)
-     * 탐지 위치 및 사용 컨텍스트 (Where found and how used)
-     * 코드 증거 (Code evidence if available)
-   - **위험도 평가 (Risk Assessment)**: Overall security risk level
-   - Format: Use paragraphs, bullet points, and clear sections
-   - Minimum 500 words in Korean
-   - Be specific and technical
-
-3. **전환 가이드 (Migration Guide):**
-   Create a DETAILED, ACTIONABLE migration plan with:
-   - **개요 (Overview)**: Why PQC migration is necessary
-   - **알고리즘별 전환 방안 (Per-Algorithm Migration)**: For EACH detected algorithm:
-     * 권장 PQC 대안 (Recommended PQC alternatives with technical specs)
-     * 구체적 마이그레이션 단계 (Step-by-step migration process)
-     * 코드 예시 (Before/After code examples if applicable)
-     * 고려사항 (Performance, compatibility, security considerations)
-   - **전환 우선순위 (Migration Priority)**: Which algorithms to migrate first
-   - **테스트 및 검증 방법 (Testing & Validation)**
-   - **참고 자료 (References)**: NIST standards, libraries, documentation
-   - Format: Numbered steps with detailed explanations
-   - Minimum 700 words in Korean
-   - Be practical and implementable
+1. **결론/전환 안내 (migrationGuide 필드)**:
+   - 한국어 한 문단으로 작성 (불릿/번호 목록/불필요한 줄바꿈 없이 문장만 사용)
+   - 포함: 총 탐지 건수(${totalFindings}), 많이 영향을 받은 파일/모듈(있다면), 대표 알고리즘 1~2개와 교체해야 할 PQC 대안, 즉시 조치 및 추가 검증/배포 유의사항
+   - 간결하지만 구체적이고 실행 가능하게 작성
 
 **Output Format:**
 Return ONLY a valid JSON object (no markdown, no code blocks):
 {
   "scanTarget": "exact file path only",
-  "detailContent": "detailed Korean content with proper formatting",
-  "migrationGuide": "detailed Korean content with proper formatting"
+  "migrationGuide": "single-paragraph Korean text with no bullet/number list"
 }
 
 Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by developers to actually migrate their code.`;
@@ -496,7 +502,7 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
         return {
           scanDate: formatScanDate(scanResult.date, scanResult.time),
           scanTarget: parsedResponse.scanTarget || scanResult.filePath,
-          detailContent: parsedResponse.detailContent || '분석 결과를 생성할 수 없습니다.',
+          detailContent: detectionDetailContent,
           migrationGuide: parsedResponse.migrationGuide || '마이그레이션 가이드를 생성할 수 없습니다.',
           osEnvData: parsedResponse.osEnvData || osEnvData,
           findHighNum: toNumber(parsedResponse.findHighNum, severityCounts.high),
@@ -578,16 +584,15 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
           };
 
           const scanTarget = extractField('scanTarget', jsonStr);
-          const detailContent = extractField('detailContent', jsonStr);
           const migrationGuide = extractField('migrationGuide', jsonStr);
           const parsedOsEnv = extractField('osEnvData', jsonStr);
 
-          if (scanTarget && detailContent && migrationGuide) {
+          if (migrationGuide) {
             console.log('[Gemini] Successfully extracted fields using improved manual extraction');
             return {
               scanDate: formatScanDate(scanResult.date, scanResult.time),
-              scanTarget: scanTarget,
-              detailContent: detailContent,
+              scanTarget: scanTarget || scanResult.filePath,
+              detailContent: detectionDetailContent,
               migrationGuide: migrationGuide,
               osEnvData: parsedOsEnv || osEnvData,
               findHighNum: severityCounts.high,
@@ -598,7 +603,6 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
           } else {
             console.error('[Gemini] Manual extraction failed - missing fields:', {
               scanTarget: !!scanTarget,
-              detailContent: !!detailContent,
               migrationGuide: !!migrationGuide
             });
           }
@@ -620,8 +624,8 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
     return {
       scanDate: formatScanDate(scanResult.date, scanResult.time),
       scanTarget: scanResult.filePath,
-      detailContent: `총 ${scanResult.nonPqcCount}개의 Non-PQC 알고리즘이 발견되었습니다.\n\n발견된 알고리즘:\n${[...new Set(scanResult.detections.map(d => d.algorithm))].map(algo => `- ${algo}`).join('\n')}\n\n각 알고리즘은 양자 컴퓨터 공격에 취약할 수 있으므로, PQC 알고리즘으로의 전환을 고려해야 합니다.`,
-      migrationGuide: `양자 내성 암호(PQC)로의 전환을 권장합니다.\n\n권장 대안:\n- 키 교환: CRYSTALS-Kyber (NIST 표준)\n- 디지털 서명: CRYSTALS-Dilithium, FALCON (NIST 표준)\n- 해시 기반 서명: SPHINCS+ (NIST 표준)\n\n전환 단계:\n1. 현재 사용 중인 암호 알고리즘 목록 작성\n2. PQC 대안 알고리즘 선택\n3. 테스트 환경에서 마이그레이션 수행\n4. 성능 및 호환성 검증\n5. 단계적 프로덕션 적용`,
+      detailContent: detectionDetailContent,
+      migrationGuide: `총 ${totalFindings}건의 Non-PQC 탐지가 확인되었습니다. 가장 많이 쓰인 구역을 우선 검토해 CRYSTALS-Kyber(키 교환)와 CRYSTALS-Dilithium 또는 FALCON(서명) 같은 NIST 표준 PQC로 단계적 교체를 시작하세요. 변경 전후 성능·호환성을 테스트하고, 배포 시 롤백 계획을 마련한 뒤 진행하는 것을 권장합니다.`,
       osEnvData,
       findHighNum: severityCounts.high,
       findMidNum: severityCounts.mid,
