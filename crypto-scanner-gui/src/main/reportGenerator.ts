@@ -250,11 +250,12 @@ function getFileName(filePath: string): string {
 }
 
 /**
- * 탐지 결과를 표 형식으로 변환
+ * 탐지 결과를 표 형식으로 변환 (LLM 결과 포함)
  */
-function convertDetectionsToTableRows(detections: Detection[]): any[] {
+function convertDetectionsToTableRows(detections: Detection[], llmScanResult?: LLMScanResult): any[] {
   const rows: any[] = [];
 
+  // 기존 탐지 결과 추가
   detections.forEach(detection => {
     rows.push({
       filePath: getFileName(detection.filePath || ''),
@@ -266,6 +267,29 @@ function convertDetectionsToTableRows(detections: Detection[]): any[] {
       detectionMethod: detection.detectionMethod || 'static'
     });
   });
+
+  // LLM 스캔 결과가 있고, 취약점이 발견된 경우 추가
+  if (llmScanResult?.isScanned && llmScanResult.isPqcVulnerable && llmScanResult.detectedAlgorithms?.length > 0) {
+    llmScanResult.detectedAlgorithms.forEach(algorithm => {
+      // 이미 탐지된 알고리즘이 아닌 경우만 추가
+      const alreadyDetected = detections.some(d =>
+        d.algorithm.toLowerCase().includes(algorithm.toLowerCase()) ||
+        algorithm.toLowerCase().includes(d.algorithm.toLowerCase())
+      );
+
+      if (!alreadyDetected) {
+        rows.push({
+          filePath: 'LLM Analysis',
+          algorithm: algorithm,
+          evidenceType: 'LLM Deep Analysis',
+          severity: 'High',
+          matchString: 'ASM/Code/Log 분석을 통해 탐지',
+          offset: '-',
+          detectionMethod: 'llm'
+        });
+      }
+    });
+  }
 
   return rows;
 }
@@ -333,11 +357,12 @@ function getMigrationSteps(algorithm: string): string {
 }
 
 /**
- * 전환 가이드 표 데이터 생성
+ * 전환 가이드 표 데이터 생성 (LLM 결과 포함)
  */
-function generateMigrationTableRows(detections: Detection[]): any[] {
+function generateMigrationTableRows(detections: Detection[], llmScanResult?: LLMScanResult): any[] {
   const algorithmMap = new Map<string, { severity: string; count: number; files: Set<string> }>();
 
+  // 기존 탐지 결과 추가
   detections.forEach(detection => {
     const algo = detection.algorithm;
     if (!algorithmMap.has(algo)) {
@@ -351,6 +376,25 @@ function generateMigrationTableRows(detections: Detection[]): any[] {
     entry.count++;
     entry.files.add(detection.filePath);
   });
+
+  // LLM이 추가로 탐지한 알고리즘 추가
+  if (llmScanResult?.isScanned && llmScanResult.isPqcVulnerable && llmScanResult.detectedAlgorithms?.length > 0) {
+    llmScanResult.detectedAlgorithms.forEach(algorithm => {
+      // 이미 탐지된 알고리즘이 아닌 경우만 추가
+      const alreadyDetected = detections.some(d =>
+        d.algorithm.toLowerCase().includes(algorithm.toLowerCase()) ||
+        algorithm.toLowerCase().includes(d.algorithm.toLowerCase())
+      );
+
+      if (!alreadyDetected) {
+        algorithmMap.set(algorithm, {
+          severity: 'High',
+          count: 1,
+          files: new Set(['LLM Analysis'])
+        });
+      }
+    });
+  }
 
   const rows: any[] = [];
   algorithmMap.forEach((info, algorithm) => {
@@ -368,9 +412,9 @@ function generateMigrationTableRows(detections: Detection[]): any[] {
 }
 
 /**
- * 탐지 수치 계산
+ * 탐지 수치 계산 (LLM 결과 포함)
  */
-function calculateDetectionCounts(detections: Detection[]): {
+function calculateDetectionCounts(detections: Detection[], llmScanResult?: LLMScanResult): {
   findHighNum: number;
   findMidNum: number;
   findLowNum: number;
@@ -380,6 +424,7 @@ function calculateDetectionCounts(detections: Detection[]): {
   let findMidNum = 0;
   let findLowNum = 0;
 
+  // 기존 탐지 결과 카운팅
   detections.forEach(detection => {
     const severity = (detection.severity || '').toLowerCase();
 
@@ -392,11 +437,33 @@ function calculateDetectionCounts(detections: Detection[]): {
     }
   });
 
+  // LLM이 추가로 탐지한 알고리즘 카운팅
+  if (llmScanResult?.isScanned && llmScanResult.isPqcVulnerable && llmScanResult.detectedAlgorithms?.length > 0) {
+    llmScanResult.detectedAlgorithms.forEach(algorithm => {
+      // 이미 탐지된 알고리즘이 아닌 경우만 카운팅
+      const alreadyDetected = detections.some(d =>
+        d.algorithm.toLowerCase().includes(algorithm.toLowerCase()) ||
+        algorithm.toLowerCase().includes(d.algorithm.toLowerCase())
+      );
+
+      if (!alreadyDetected) {
+        // LLM이 탐지한 알고리즘은 기본적으로 High로 카운팅
+        findHighNum++;
+      }
+    });
+  }
+
   return {
     findHighNum,
     findMidNum,
     findLowNum,
-    findAllNum: detections.length
+    findAllNum: detections.length + (llmScanResult?.isScanned && llmScanResult.isPqcVulnerable ?
+      llmScanResult.detectedAlgorithms.filter(algo =>
+        !detections.some(d =>
+          d.algorithm.toLowerCase().includes(algo.toLowerCase()) ||
+          algo.toLowerCase().includes(d.algorithm.toLowerCase())
+        )
+      ).length : 0)
   };
 }
 
@@ -422,12 +489,12 @@ async function generateReportContent(
   findLowNum: number;
   findAllNum: number;
 }> {
-  // 탐지 수치 계산
-  const detectionCounts = calculateDetectionCounts(scanResult.detections);
+  // 탐지 수치 계산 (LLM 결과 포함)
+  const detectionCounts = calculateDetectionCounts(scanResult.detections, scanResult.llmScanResult);
 
-  // 표 데이터 생성
-  const detectionTableRows = convertDetectionsToTableRows(scanResult.detections);
-  const migrationTableRows = generateMigrationTableRows(scanResult.detections);
+  // 표 데이터 생성 (LLM 스캔 결과 포함)
+  const detectionTableRows = convertDetectionsToTableRows(scanResult.detections, scanResult.llmScanResult);
+  const migrationTableRows = generateMigrationTableRows(scanResult.detections, scanResult.llmScanResult);
 
   // Gemini API 클라이언트 가져오기
   const genAI = getGeminiClient();
@@ -483,17 +550,20 @@ async function generateReportContent(
 
     // Include LLM scan results if available
     const llmScanInfo = scanResult.llmScanResult?.isScanned
-      ? `\n**LLM Scan Results:**
-- Vulnerability Status: ${scanResult.llmScanResult.isPqcVulnerable ? 'VULNERABLE' : 'SAFE'}
+      ? `\n**LLM Deep Analysis Results:**
+- Vulnerability Status: ${scanResult.llmScanResult.isPqcVulnerable ? 'VULNERABLE (High Risk)' : 'SAFE'}
 - Confidence Score: ${(scanResult.llmScanResult.confidenceScore * 100).toFixed(1)}%
-- Detected Algorithms: ${scanResult.llmScanResult.detectedAlgorithms.join(', ') || 'None'}
-- Scanned At: ${scanResult.llmScanResult.scannedAt}
+- Additional Algorithms Detected by LLM: ${scanResult.llmScanResult.detectedAlgorithms.join(', ') || 'None'}
+- Analysis Date: ${scanResult.llmScanResult.scannedAt}
+- Analysis Methods: ASM code analysis, Source code analysis, Execution logs analysis
 
-**LLM Evidence:**
+**LLM Evidence (ASM/Code/Log Analysis):**
 ${scanResult.llmScanResult.evidence.substring(0, 2000)}${scanResult.llmScanResult.evidence.length > 2000 ? '\n... (truncated)' : ''}
 
-**LLM Recommendations:**
-${scanResult.llmScanResult.recommendations.substring(0, 2000)}${scanResult.llmScanResult.recommendations.length > 2000 ? '\n... (truncated)' : ''}`
+**LLM Expert Recommendations:**
+${scanResult.llmScanResult.recommendations.substring(0, 2000)}${scanResult.llmScanResult.recommendations.length > 2000 ? '\n... (truncated)' : ''}
+
+**IMPORTANT:** Include LLM-detected algorithms in your detailed content analysis!`
       : '';
 
     const prompt = `You are an expert cryptography security analyst specializing in post-quantum cryptography (PQC) migration. Analyze the following scan results and generate a DETAILED, COMPREHENSIVE security report in Korean.
