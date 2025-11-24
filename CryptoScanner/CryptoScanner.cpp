@@ -1022,51 +1022,83 @@ void CryptoScanner::scanPathLikeAntivirus(
 
     std::cerr << "[CryptoScanner] File collection complete. Total files: " << files.size() << std::endl;
 #else
-    // Windows: use std::filesystem (find command not available)
-    auto addFromRoot = [&](const fs::path& r) {
-        if (fs::is_regular_file(r, ec)) { pushCandidate(r); return; }
-        if (!fs::is_directory(r, ec)) return;
-        if (activeOpt.recurse) {
-            try {
-                for (fs::recursive_directory_iterator it(r, fs::directory_options::skip_permission_denied, ec), end; it != end;) {
-                    std::error_code iter_ec;
-                    const auto& de = *it;
-                    if (isCancelled && isCancelled()) break;
-                    if (de.is_directory(iter_ec)) {
-                        if (shouldSkipByProfile(de.path())) it.disable_recursion_pending();
-                        try { ++it; } catch (const std::exception& e) {
-                            try { it.disable_recursion_pending(); ++it; } catch (...) { break; }
-                        }
-                        continue;
-                    }
-                    if (de.is_symlink(iter_ec)) {
-                        try { ++it; } catch (...) { break; }
-                        continue;
-                    }
-                    if (!de.is_regular_file(iter_ec)) {
-                        try { ++it; } catch (...) { break; }
-                        continue;
-                    }
-                    if (shouldSkipByProfile(de.path().parent_path())) {
-                        try { ++it; } catch (...) { break; }
-                        continue;
-                    }
-                    pushCandidate(de.path());
-                    try { ++it; } catch (...) { break; }
-                }
-            } catch (const std::exception& e) {
-                return;
-            }
-        } else {
-            for (fs::directory_iterator it(r, ec), end; it != end; ++it) {
-                const auto& de = *it;
-                if (!de.is_regular_file(ec)) continue;
-                pushCandidate(de.path());
-            }
-        }
-    };
+    // Windows: Use 'where' command for fast file discovery (similar to 'find' on Unix)
+    std::cerr << "[CryptoScanner] Using 'where' command for fast file collection..." << std::endl;
 
-    for (const auto& r : roots) addFromRoot(r);
+    for (const auto& r : roots) {
+        if (isCancelled && isCancelled()) break;
+
+        std::string rootStr = r.string();
+        std::cerr << "[CryptoScanner] Searching in: " << rootStr << std::endl;
+
+        // Build where command with multiple file patterns
+        // Note: Windows 'where' is limited, so we use PowerShell for better control
+        std::ostringstream findCmd;
+
+        // Use PowerShell Get-ChildItem for fast recursive file search
+        // Set UTF-8 encoding to handle international characters
+        findCmd << "powershell -NoProfile -Command \"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ";
+        findCmd << "Get-ChildItem -LiteralPath '" << rootStr << "' -Recurse -File -ErrorAction SilentlyContinue";
+
+        // Add exclusion filters
+        findCmd << " | Where-Object { $_.FullName -notmatch '\\\\Windows\\\\' -and $_.FullName -notmatch '\\\\ProgramData\\\\' -and $_.FullName -notmatch '\\\\\\$Recycle\\.Bin\\\\' ";
+        findCmd << "-and $_.FullName -notmatch '\\\\System Volume Information\\\\' -and $_.FullName -notmatch '\\\\pagefile\\.sys$' ";
+        findCmd << "-and $_.FullName -notmatch '\\\\hiberfil\\.sys$' -and $_.FullName -notmatch '\\\\swapfile\\.sys$' ";
+        findCmd << "-and $_.FullName -notmatch '\\\\node_modules\\\\' -and $_.FullName -notmatch '\\\\.git\\\\' ";
+        findCmd << "-and $_.FullName -notmatch '\\\\.npm\\\\' -and $_.FullName -notmatch '\\\\.cache\\\\' ";
+        findCmd << "-and $_.FullName -notmatch '\\\\__pycache__\\\\' -and $_.FullName -notmatch '\\\\.vscode\\\\' ";
+        findCmd << "-and $_.FullName -notmatch '\\\\.cargo\\\\' -and $_.FullName -notmatch '\\\\.rustup\\\\' ";
+        findCmd << "-and $_.FullName -notmatch '\\\\.m2\\\\' -and $_.FullName -notmatch '\\\\.gradle\\\\' ";
+
+        // Add file extension filters and size limit (< 100MB)
+        findCmd << "-and ($_.Extension -match '\\.(c|cc|cpp|cxx|h|hpp|hh|py|java|go|rs|class|jar|zip|war|ear|apk|aar|jmod|so|dll|exe|dylib|a|o|cer|crt|der|pem|p7b|p7c|pfx|p12|key|pub|csr)$' ";
+        findCmd << "-or $_.Name -match '\\.so\\.[0-9]+') -and $_.Length -lt 104857600 }";
+
+        // Output full path
+        findCmd << " | ForEach-Object { $_.FullName }\"";
+
+        std::string cmdStr = findCmd.str();
+        std::cerr << "[CryptoScanner] Executing PowerShell file search command..." << std::endl;
+
+        FILE* pipe = _popen(cmdStr.c_str(), "r");
+        if (pipe) {
+            char buffer[4096];
+            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                if (isCancelled && isCancelled()) break;
+                std::string path = buffer;
+                // Remove trailing newline/carriage return
+                while (!path.empty() && (path.back() == '\n' || path.back() == '\r')) path.pop_back();
+                if (!path.empty()) {
+                    // Verify file exists and apply additional filters with error handling
+                    try {
+                        std::error_code ec;
+                        fs::path p(path);
+                        if (fs::exists(p, ec) && fs::is_regular_file(p, ec) && !ec) {
+                            // Apply shouldSkipByProfile check
+                            if (!shouldSkipByProfile(p)) {
+                                files.push_back(path);
+                                filesCollected.fetch_add(1);
+
+                                // Progress feedback every 1000 files
+                                if (filesCollected.load() % 1000 == 0) {
+                                    std::cerr << "[CryptoScanner] Collected " << filesCollected.load() << " files..." << std::endl;
+                                }
+                            }
+                        }
+                    } catch (const std::exception& e) {
+                        // Skip files with encoding issues
+                        std::cerr << "[CryptoScanner] Skipping file with encoding error: " << e.what() << std::endl;
+                        continue;
+                    }
+                }
+            }
+            _pclose(pipe);
+        } else {
+            std::cerr << "[CryptoScanner] ERROR: Failed to execute PowerShell command!" << std::endl;
+        }
+    }
+
+    std::cerr << "[CryptoScanner] File collection complete. Total files: " << files.size() << std::endl;
 #endif
 
     // Phase 2: Prepare for scanning (skip total size calculation for speed)
