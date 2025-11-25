@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PageType, ScanResult, TabType, Detection } from '../types';
 import { FaChevronLeft, FaHome, FaSearch, FaFileAlt, FaExclamationTriangle, FaFileContract, FaDownload, FaRobot, FaPlay } from 'react-icons/fa';
 import { LuShieldAlert } from "react-icons/lu";
+import ModalOverlay from '../components/ModalOverlay';
 
 interface AnalyzePageProps {
   result: ScanResult;
@@ -20,6 +21,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
   const [algorithmDescriptions, setAlgorithmDescriptions] = useState<Map<string, string>>(new Map());
   const [hoveredAlgo, setHoveredAlgo] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState<boolean>(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
   const [isLLMScanning, setIsLLMScanning] = useState<boolean>(false);
 
@@ -27,6 +29,12 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
   const formatNumber = (num: number): string => {
     return num.toLocaleString('en-US');
   };
+
+  useEffect(() => {
+    if (activeTab !== 'details' && isDetailsExpanded) {
+      setIsDetailsExpanded(false);
+    }
+  }, [activeTab, isDetailsExpanded]);
 
   // Load patterns.json to get algorithm descriptions
   useEffect(() => {
@@ -134,6 +142,10 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
   };
 
   const resultData = parseResultData();
+  const isDetailsTab = activeTab === 'details';
+  const detailPanelHeight = isDetailsTab
+    ? 'clamp(240px, 34vh, 380px)'
+    : 'clamp(200px, 28vh, 294px)';
 
   // Filter detections based on search query
   const filteredDetections = resultData.detections.filter(detection => {
@@ -512,6 +524,287 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
     }));
   };
 
+  const renderDetailsContent = (isExpandedView: boolean) => (
+    <div style={{
+      padding: isExpandedView ? '18px 22px 22px' : '30px',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: isExpandedView ? '12px' : '16px',
+      position: 'relative',
+      minHeight: 0,
+      flex: 1
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontSize: '12px',
+        fontFamily: 'SF Pro'
+      }}>
+        <span>
+          {isExpandedView
+            ? 'Expanded details view. Scroll to review more detections.'
+            : 'Click the detections list to view it in full-screen.'}
+        </span>
+        {isExpandedView && (
+          <button
+            onClick={() => setIsDetailsExpanded(false)}
+            style={{
+              padding: '8px 14px',
+              background: 'rgba(255, 255, 255, 0.12)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '999px',
+              color: '#FFFFFF',
+              fontSize: '12px',
+              fontFamily: 'SF Pro',
+              cursor: 'pointer',
+              boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.25)'
+            }}
+          >
+            Back
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}>
+        {/* Search bar */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '4px'
+        }}>
+          <div style={{
+            position: 'relative',
+            flex: 1
+          }}>
+            <input
+              type="text"
+              placeholder="Search detections (file path, algorithm, match string, etc.)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 40px 10px 16px',
+                background: isExpandedView ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '8px',
+                color: '#FFFFFF',
+                fontSize: '14px',
+                fontFamily: 'SF Pro',
+                outline: 'none',
+                backdropFilter: 'blur(10px)'
+              }}
+            />
+            <div style={{
+              position: 'absolute',
+              right: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontSize: '16px'
+            }}>
+              <FaSearch />
+            </div>
+          </div>
+
+          {/* Clear search button */}
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                padding: '8px 12px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '6px',
+                color: '#FFFFFF',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontFamily: 'SF Pro'
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        {/* Results counter */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          color: 'rgba(255, 255, 255, 0.7)',
+          fontSize: '13px',
+          fontFamily: 'SF Pro'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>
+              Showing {filteredDetections.length} of {resultData.detections.length} detections
+              {searchQuery && ` for "${searchQuery}"`}
+            </span>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <span>Static: {resultData.methodCounts.static}</span>
+              <span>Dynamic: {resultData.methodCounts.dynamic}</span>
+            </div>
+          </div>
+          {searchQuery && filteredDetections.length === 0 && (
+            <span style={{ color: 'rgba(255, 255, 255, 0.5)', alignSelf: 'flex-end' }}>
+              No matches found
+            </span>
+          )}
+        </div>
+
+        {/* Detection list */}
+        <div
+          onClick={!isExpandedView ? () => setIsDetailsExpanded(true) : undefined}
+          style={{
+            flex: 1,
+            background: 'rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.18)',
+            cursor: isExpandedView ? 'default' : 'zoom-in',
+            boxShadow: isExpandedView
+              ? '0px 16px 28px rgba(0, 0, 0, 0.4)'
+              : '0px 8px 16px rgba(0, 0, 0, 0.18)',
+            transition: 'box-shadow 0.3s ease, transform 0.3s ease',
+            transform: isExpandedView ? 'translateY(-2px)' : 'none',
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            minHeight: 0
+          }}
+        >
+          {!isExpandedView && (
+            <div style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              padding: '6px 10px',
+              borderRadius: '999px',
+              background: 'rgba(0, 0, 0, 0.35)',
+              color: '#FFFFFF',
+              fontSize: '11px',
+              fontFamily: 'SF Pro',
+              letterSpacing: '0.2px'
+            }}>
+              Click to expand
+            </div>
+          )}
+
+          {filteredDetections.length > 0 ? (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              overflowY: 'auto',
+              paddingRight: '4px',
+              flex: 1,
+              minHeight: 0
+            }}>
+              {filteredDetections.map((detection, index) => {
+                const method = (detection.detectionMethod === 'dynamic' || detection.detectionMethod === 'static+dynamic')
+                  ? 'dynamic'
+                  : 'static';
+                const methodLabel = method === 'dynamic' ? 'Dynamic' : 'Static';
+                const methodColor = method === 'dynamic' ? '#FF9500' : '#34C759';
+                const borderColor = method === 'dynamic'
+                  ? 'rgba(255, 149, 0, 0.6)'
+                  : 'rgba(255, 255, 255, 0.12)';
+
+                const matchLabel = method === 'dynamic' ? 'API' : 'Match';
+                const matchValue = method === 'dynamic'
+                  ? (detection.dynamicMatchString || detection.dynamicApi || detection.matchString || 'N/A')
+                  : (detection.matchString || '');
+
+                const typeLabel = method === 'dynamic' ? 'Surface' : 'Type';
+                const typeValue = method === 'dynamic'
+                  ? (detection.dynamicEvidenceType || detection.evidenceType || 'dynamic')
+                  : (detection.evidenceType || '');
+
+                return (
+                  <div key={index} style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    fontSize: '12px',
+                    fontFamily: 'SF Pro',
+                    color: '#FFFFFF',
+                    border: `1px solid ${borderColor}`
+                  }}>
+                    <div><strong>File:</strong> {highlightText(detection.filePath, searchQuery)}</div>
+                    <div><strong>Algorithm:</strong> {highlightText(detection.algorithm, searchQuery)}</div>
+                    <div><strong>{matchLabel}:</strong> {highlightText(matchValue, searchQuery)}</div>
+                    <div><strong>Offset:</strong> {highlightText(detection.offset.toString(), searchQuery)}</div>
+                    <div><strong>{typeLabel}:</strong> {highlightText(typeValue, searchQuery)}</div>
+                    <div><strong>Severity:</strong> {highlightText(detection.severity, searchQuery)}</div>
+                    <div>
+                      <strong>Method:</strong>{' '}
+                      <span style={{ color: methodColor, fontWeight: 600 }}>
+                        {highlightText(methodLabel, searchQuery)}
+                      </span>
+                    </div>
+                    {method === 'dynamic' && detection.dynamicKey && (
+                      <div><strong>Dynamic Key:</strong> {highlightText(detection.dynamicKey, searchQuery)}</div>
+                    )}
+                    {method === 'dynamic' && detection.dynamicKeyLength !== undefined && (
+                      <div><strong>Dynamic Key Length:</strong> {highlightText(detection.dynamicKeyLength.toString(), searchQuery)}</div>
+                    )}
+                    {method === 'dynamic' && detection.dynamicIv && (
+                      <div><strong>Dynamic IV:</strong> {highlightText(detection.dynamicIv, searchQuery)}</div>
+                    )}
+                    {method === 'dynamic' && detection.dynamicIvLength !== undefined && (
+                      <div><strong>Dynamic IV Length:</strong> {highlightText(detection.dynamicIvLength.toString(), searchQuery)}</div>
+                    )}
+                    {method === 'dynamic' && detection.dynamicTag && (
+                      <div><strong>Dynamic Tag:</strong> {highlightText(detection.dynamicTag, searchQuery)}</div>
+                    )}
+                    {method === 'dynamic' && detection.dynamicTagLength !== undefined && (
+                      <div><strong>Dynamic Tag Length:</strong> {highlightText(detection.dynamicTagLength.toString(), searchQuery)}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : resultData.detections.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: '16px',
+              fontFamily: 'SF Pro',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              No detections found
+            </div>
+          ) : (
+            <div style={{
+              textAlign: 'center',
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: '16px',
+              fontFamily: 'SF Pro',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              No detections match your search
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'algorithm':
@@ -636,201 +929,7 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
           </div>
         );
       case 'details':
-        return (
-          <div style={{
-            padding: '30px',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px'
-          }}>
-            {/* Search bar */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              marginBottom: '4px'
-            }}>
-              <div style={{
-                position: 'relative',
-                flex: 1
-              }}>
-                <input
-                  type="text"
-                  placeholder="Search detections (file path, algorithm, match string, etc.)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 40px 10px 16px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '8px',
-                    color: '#FFFFFF',
-                    fontSize: '14px',
-                    fontFamily: 'SF Pro',
-                    outline: 'none',
-                    backdropFilter: 'blur(10px)'
-                  }}
-                />
-                <div style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'rgba(255, 255, 255, 0.5)',
-                  fontSize: '16px'
-                }}>
-                  <FaSearch />
-                </div>
-              </div>
-
-              {/* Clear search button */}
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  style={{
-                    padding: '8px 12px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '6px',
-                    color: '#FFFFFF',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    fontFamily: 'SF Pro'
-                  }}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-
-            {/* Results counter */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-              color: 'rgba(255, 255, 255, 0.7)',
-              fontSize: '13px',
-              fontFamily: 'SF Pro'
-            }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <span>
-                  Showing {filteredDetections.length} of {resultData.detections.length} detections
-                  {searchQuery && ` for "${searchQuery}"`}
-                </span>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <span>Static: {resultData.methodCounts.static}</span>
-                  <span>Dynamic: {resultData.methodCounts.dynamic}</span>
-                </div>
-              </div>
-              {searchQuery && filteredDetections.length === 0 && (
-                <span style={{ color: 'rgba(255, 255, 255, 0.5)', alignSelf: 'flex-end' }}>
-                  No matches found
-                </span>
-              )}
-            </div>
-
-            {/* Detection list */}
-            <div style={{
-              flex: 1,
-              overflowY: 'auto',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '12px',
-              padding: '16px'
-            }}>
-              {filteredDetections.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {filteredDetections.map((detection, index) => {
-                    const method = (detection.detectionMethod === 'dynamic' || detection.detectionMethod === 'static+dynamic')
-                      ? 'dynamic'
-                      : 'static';
-                    const methodLabel = method === 'dynamic' ? 'Dynamic' : 'Static';
-                    const methodColor = method === 'dynamic' ? '#FF9500' : '#34C759';
-                    const borderColor = method === 'dynamic'
-                      ? 'rgba(255, 149, 0, 0.6)'
-                      : 'rgba(255, 255, 255, 0.12)';
-
-                    const matchLabel = method === 'dynamic' ? 'API' : 'Match';
-                    const matchValue = method === 'dynamic'
-                      ? (detection.dynamicMatchString || detection.dynamicApi || detection.matchString || 'N/A')
-                      : (detection.matchString || '');
-
-                    const typeLabel = method === 'dynamic' ? 'Surface' : 'Type';
-                    const typeValue = method === 'dynamic'
-                      ? (detection.dynamicEvidenceType || detection.evidenceType || 'dynamic')
-                      : (detection.evidenceType || '');
-
-                    return (
-                      <div key={index} style={{
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        padding: '12px',
-                        fontSize: '12px',
-                        fontFamily: 'SF Pro',
-                        color: '#FFFFFF',
-                        border: `1px solid ${borderColor}`
-                      }}>
-                        <div><strong>File:</strong> {highlightText(detection.filePath, searchQuery)}</div>
-                        <div><strong>Algorithm:</strong> {highlightText(detection.algorithm, searchQuery)}</div>
-                        <div><strong>{matchLabel}:</strong> {highlightText(matchValue, searchQuery)}</div>
-                        <div><strong>Offset:</strong> {highlightText(detection.offset.toString(), searchQuery)}</div>
-                        <div><strong>{typeLabel}:</strong> {highlightText(typeValue, searchQuery)}</div>
-                        <div><strong>Severity:</strong> {highlightText(detection.severity, searchQuery)}</div>
-                        <div>
-                          <strong>Method:</strong>{' '}
-                          <span style={{ color: methodColor, fontWeight: 600 }}>
-                            {highlightText(methodLabel, searchQuery)}
-                          </span>
-                        </div>
-                        {method === 'dynamic' && detection.dynamicKey && (
-                          <div><strong>Dynamic Key:</strong> {highlightText(detection.dynamicKey, searchQuery)}</div>
-                        )}
-                        {method === 'dynamic' && detection.dynamicKeyLength !== undefined && (
-                          <div><strong>Dynamic Key Length:</strong> {highlightText(detection.dynamicKeyLength.toString(), searchQuery)}</div>
-                        )}
-                        {method === 'dynamic' && detection.dynamicIv && (
-                          <div><strong>Dynamic IV:</strong> {highlightText(detection.dynamicIv, searchQuery)}</div>
-                        )}
-                        {method === 'dynamic' && detection.dynamicIvLength !== undefined && (
-                          <div><strong>Dynamic IV Length:</strong> {highlightText(detection.dynamicIvLength.toString(), searchQuery)}</div>
-                        )}
-                        {method === 'dynamic' && detection.dynamicTag && (
-                          <div><strong>Dynamic Tag:</strong> {highlightText(detection.dynamicTag, searchQuery)}</div>
-                        )}
-                        {method === 'dynamic' && detection.dynamicTagLength !== undefined && (
-                          <div><strong>Dynamic Tag Length:</strong> {highlightText(detection.dynamicTagLength.toString(), searchQuery)}</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : resultData.detections.length === 0 ? (
-                <div style={{
-                  textAlign: 'center',
-                  color: 'rgba(255, 255, 255, 0.6)',
-                  fontSize: '16px',
-                  fontFamily: 'SF Pro'
-                }}>
-                  No detections found
-                </div>
-              ) : (
-                <div style={{
-                  textAlign: 'center',
-                  color: 'rgba(255, 255, 255, 0.6)',
-                  fontSize: '16px',
-                  fontFamily: 'SF Pro'
-                }}>
-                  No detections match your search
-                </div>
-              )}
-            </div>
-          </div>
-        );
+        return renderDetailsContent(false);
       case 'llm':
         // FULL Scan: Single box layout (rendered in main content area)
         return (
@@ -1610,17 +1709,30 @@ const AnalyzePage: React.FC<AnalyzePageProps> = ({ result, onNavigate, onUpdateS
         <div style={{
           width: 'calc(3 * clamp(300px, 24vw, 371px) + 2 * clamp(20px, 2vw, 40px))',
           maxWidth: '1400px',
-          height: 'clamp(200px, 28vh, 294px)',
+          height: detailPanelHeight,
           background: 'rgba(255, 255, 255, 0.1)',
           border: '1px solid rgba(255, 255, 255, 0.2)',
           borderRadius: '18px',
           backdropFilter: 'blur(16px)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          transition: 'height 0.3s ease'
         }}>
           {renderTabContent()}
         </div>
       )}
       </div>
+
+      <ModalOverlay
+        isOpen={isDetailsExpanded}
+        onClose={() => setIsDetailsExpanded(false)}
+        showCloseButton={false}
+        width="min(1200px, 92vw)"
+        maxWidth="1280px"
+      >
+        <div style={{ height: '100%' }}>
+          {renderDetailsContent(true)}
+        </div>
+      </ModalOverlay>
 
       {/* Global Tooltip - rendered at component root level */}
       {hoveredAlgo && (() => {
