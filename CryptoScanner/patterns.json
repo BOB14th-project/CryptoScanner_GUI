@@ -1419,12 +1419,6 @@
       "description": "secp224r1 곡선 DER 인코딩. Shor 알고리즘으로 이산 로그 해결 가능. PQC로 전환 권장"
     },
     {
-      "name": "CurveParam (secp256k1 a)",
-      "hex": "00000000000000000000000000000000000000000000000000000000",
-      "type": "curve_param",
-      "description": "secp256k1 곡선 DER 인코딩. Shor 알고리즘으로 이산 로그 해결 가능. PQC로 전환 권장"
-    },
-    {
       "name": "CurveParam (secp224k1 b)",
       "hex": "00000000000000000000000000000000000000000000000000000005",
       "type": "curve_param",
@@ -1447,12 +1441,6 @@
       "hex": "01000000000000000000000000001DCE8D2EC6184CAF0A971769FB1F7",
       "type": "curve_param",
       "description": "secp224k1 곡선 DER 인코딩. Shor 알고리즘으로 이산 로그 해결 가능. PQC로 전환 권장"
-    },
-    {
-      "name": "CurveParam (secp256k1 a)",
-      "hex": "00000000000000000000000000000000000000000000000000000000",
-      "type": "curve_param",
-      "description": "secp256k1 곡선 DER 인코딩. Shor 알고리즘으로 이산 로그 해결 가능. PQC로 전환 권장"
     },
     {
       "name": "CurveParam (secp256k1 b)",

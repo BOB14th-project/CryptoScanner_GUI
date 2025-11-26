@@ -514,7 +514,20 @@ async function generateReportContent(
         const count = scanResult.detections.filter(d => d.algorithm === algo).length;
         return `- ${algo}: ${count}건 탐지\n  양자 컴퓨터 공격에 취약하며 즉각적인 전환이 필요합니다.`;
       }).join('\n')}\n\n위험도 평가:\n전체적으로 ${detectionCounts.findHighNum > 0 ? '높은' : detectionCounts.findMidNum > 0 ? '중간' : '낮은'} 수준의 양자 위협이 존재합니다.\n조속한 PQC 전환 계획 수립 및 실행이 권장됩니다.`,
-      migrationGuide: `PQC 전환 가이드\n\n개요:\n양자 컴퓨터의 발전으로 기존 암호 체계가 위협받고 있습니다. NIST는 2024년부터 PQC 표준을 공식 채택하였으며, 산업계 전반의 전환이 진행 중입니다. 본 시스템도 즉각적인 전환 계획 수립이 필요합니다.\n\n주요 알고리즘 전환 방안:\n${algorithms.slice(0, 3).map((algo, i) => `\n${i+1}. ${algo} 전환:\n   - 권장 PQC: CRYSTALS-Kyber (키 교환) 또는 CRYSTALS-Dilithium (서명)\n   - 단계: ① 라이브러리 선정 → ② 테스트 환경 구축 → ③ 호환성 검증 → ④ 단계적 배포\n   - 고려사항: 기존 시스템과의 호환성, 성능 영향 평가`).join('\n')}\n\n전환 우선순위:\nHigh 심각도 항목부터 우선 전환을 시작하고, 단계적으로 전체 시스템에 적용합니다.\n\n테스트 방법:\n- PQC 라이브러리 정상 동작 확인\n- 기존 데이터 호환성 테스트\n- 성능 벤치마크 수행\n- 보안 감사 실시\n\n참고 자료:\n- NIST PQC 표준: csrc.nist.gov/projects/post-quantum-cryptography\n- CRYSTALS 라이브러리: pq-crystals.org`,
+      migrationGuide: `PQC 전환 가이드\n\n개요:\n양자 컴퓨터의 발전으로 기존 암호 체계가 위협받고 있습니다. NIST는 2024년부터 PQC 표준을 공식 채택하였으며, 산업계 전반의 전환이 진행 중입니다. 본 시스템도 즉각적인 전환 계획 수립이 필요합니다.\n\n주요 알고리즘 전환 방안:\n${algorithms.slice(0, 3).map((algo, i) => {
+        const pqcRecommendation = getRecommendedPQC(algo);
+        const exampleBefore = algo.toLowerCase().includes('rsa')
+          ? '// 기존 RSA 코드 예시\nRSA rsa = RSA.Create(2048);\nbyte[] encryptedData = rsa.Encrypt(plainData, RSAEncryptionPadding.Pkcs1);'
+          : algo.toLowerCase().includes('ecc') || algo.toLowerCase().includes('ecdsa')
+          ? '// 기존 ECDSA 코드 예시\nECDsa ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);\nbyte[] signature = ecdsa.SignData(data, HashAlgorithmName.SHA256);'
+          : '// 기존 암호화 코드\n// ' + algo + ' 알고리즘 사용';
+        const exampleAfter = algo.toLowerCase().includes('rsa')
+          ? '// PQC로 전환된 코드 예시\n// CRYSTALS-Kyber를 사용한 키 교환\nKyberKeyPair keyPair = Kyber.GenerateKeyPair(KyberParameterSet.Kyber768);\nbyte[] ciphertext = Kyber.Encapsulate(keyPair.PublicKey, out byte[] sharedSecret);'
+          : algo.toLowerCase().includes('ecc') || algo.toLowerCase().includes('ecdsa')
+          ? '// PQC로 전환된 코드 예시\n// CRYSTALS-Dilithium을 사용한 서명\nDilithiumKeyPair keyPair = Dilithium.GenerateKeyPair(DilithiumParameterSet.Dilithium3);\nbyte[] signature = Dilithium.Sign(data, keyPair.PrivateKey);'
+          : '// PQC 전환 코드\n// NIST 표준 PQC 알고리즘 사용';
+        return `\n${i+1}. ${algo} 전환:\n   - 권장 PQC: ${pqcRecommendation}\n   \n   [기존 코드]\n${exampleBefore}\n\n   [PQC 전환 코드]\n${exampleAfter}\n\n   - 단계: ① 라이브러리 선정 → ② 테스트 환경 구축 → ③ 호환성 검증 → ④ 단계적 배포\n   - 고려사항: 기존 시스템과의 호환성, 성능 영향 평가`;
+      }).join('\n')}\n\n전환 우선순위:\nHigh 심각도 항목부터 우선 전환을 시작하고, 단계적으로 전체 시스템에 적용합니다.\n\n테스트 방법:\n- PQC 라이브러리 정상 동작 확인\n- 기존 데이터 호환성 테스트\n- 성능 벤치마크 수행\n- 보안 감사 실시\n\n참고 자료:\n- NIST PQC 표준: csrc.nist.gov/projects/post-quantum-cryptography\n- CRYSTALS 라이브러리: pq-crystals.org`,
       detectionTableRows,
       migrationTableRows,
       ...detectionCounts
@@ -586,7 +599,7 @@ ${csvData.split('\n').length > 50 ? '\n... (truncated for brevity)' : ''}
 
 ${dbData?.file ? `\n**Database File Information:**\n${JSON.stringify(dbData.file, null, 2).substring(0, 1500)}` : ''}
 ${dbData?.llm?.assembly ? `\n**Assembly Code Available:** Yes (${typeof dbData.llm.assembly === 'string' ? dbData.llm.assembly.length : 'available'} bytes)` : ''}
-${dbData?.llm?.code ? `\n**Source Code Available:** Yes` : ''}
+${dbData?.llm?.code ? `\n**Source Code Available:** Yes\n**IMPORTANT: Use this source code for BEFORE code examples**\n${typeof dbData.llm.code === 'string' ? dbData.llm.code.substring(0, 5000) : JSON.stringify(dbData.llm.code).substring(0, 5000)}` : ''}
 ${dbData?.llm?.log ? `\n**Analysis Logs Available:** Yes` : ''}
 ${llmScanInfo}
 
@@ -633,18 +646,21 @@ ${llmScanInfo}
    - Be specific but brief
 
 6. **전환 가이드 (Migration Guide):**
-   Create a FOCUSED, ACTIONABLE migration plan with:
+   Create a FOCUSED, ACTIONABLE migration plan with CODE EXAMPLES:
    - **개요 (Overview)**: Why PQC migration is necessary (3-4 sentences)
    - **주요 알고리즘 전환 방안 (Key Algorithm Migration)**: For top 3-4 detected algorithms only:
      * 권장 PQC 대안 (Recommended PQC alternatives)
+     * **[중요] 기존 코드 예시 (BEFORE CODE)**: Show actual vulnerable code example from the scanned file if available from llm_code database
+     * **[중요] PQC 전환 코드 예시 (AFTER CODE)**: Show the PQC-migrated version of the same code
      * 마이그레이션 단계 (Step-by-step migration - 3-5 steps per algorithm)
      * 주요 고려사항 (Key considerations)
    - **전환 우선순위 (Migration Priority)**: Brief priority ranking (2-3 sentences)
    - **테스트 방법 (Testing)**: Quick testing checklist (3-5 items)
    - **참고 자료 (References)**: Essential NIST standards and documentation only
-   - **IMPORTANT: Total content should fit within 1.5 pages (approximately 800-1000 words in Korean)**
-   - Format: Use numbered lists and bullet points for readability
-   - Be practical and concise
+   - **IMPORTANT: Total content should fit within 2 pages (approximately 1000-1200 words in Korean)**
+   - **IMPORTANT: Include actual code snippets in markdown code blocks for BEFORE and AFTER comparison**
+   - Format: Use numbered lists, bullet points, and code blocks for readability
+   - Be practical and provide real, compilable code examples
 
 **Output Format:**
 Return ONLY a valid JSON object (no markdown, no code blocks):
@@ -840,7 +856,20 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
         const count = scanResult.detections.filter(d => d.algorithm === algo).length;
         return `- ${algo}: ${count}건 탐지\n  양자 컴퓨터 공격에 취약하며 즉각적인 전환이 필요합니다.`;
       }).join('\n')}\n\n위험도 평가:\n전체적으로 ${detectionCounts.findHighNum > 0 ? '높은' : detectionCounts.findMidNum > 0 ? '중간' : '낮은'} 수준의 양자 위협이 존재합니다.\n조속한 PQC 전환 계획 수립 및 실행이 권장됩니다.`,
-      migrationGuide: `PQC 전환 가이드\n\n개요:\n양자 컴퓨터의 발전으로 기존 암호 체계가 위협받고 있습니다. NIST는 2024년부터 PQC 표준을 공식 채택하였으며, 산업계 전반의 전환이 진행 중입니다. 본 시스템도 즉각적인 전환 계획 수립이 필요합니다.\n\n주요 알고리즘 전환 방안:\n${algorithms.slice(0, 3).map((algo, i) => `\n${i+1}. ${algo} 전환:\n   - 권장 PQC: CRYSTALS-Kyber (키 교환) 또는 CRYSTALS-Dilithium (서명)\n   - 단계: ① 라이브러리 선정 → ② 테스트 환경 구축 → ③ 호환성 검증 → ④ 단계적 배포\n   - 고려사항: 기존 시스템과의 호환성, 성능 영향 평가`).join('\n')}\n\n전환 우선순위:\nHigh 심각도 항목부터 우선 전환을 시작하고, 단계적으로 전체 시스템에 적용합니다.\n\n테스트 방법:\n- PQC 라이브러리 정상 동작 확인\n- 기존 데이터 호환성 테스트\n- 성능 벤치마크 수행\n- 보안 감사 실시\n\n참고 자료:\n- NIST PQC 표준: csrc.nist.gov/projects/post-quantum-cryptography\n- CRYSTALS 라이브러리: pq-crystals.org`,
+      migrationGuide: `PQC 전환 가이드\n\n개요:\n양자 컴퓨터의 발전으로 기존 암호 체계가 위협받고 있습니다. NIST는 2024년부터 PQC 표준을 공식 채택하였으며, 산업계 전반의 전환이 진행 중입니다. 본 시스템도 즉각적인 전환 계획 수립이 필요합니다.\n\n주요 알고리즘 전환 방안:\n${algorithms.slice(0, 3).map((algo, i) => {
+        const pqcRecommendation = getRecommendedPQC(algo);
+        const exampleBefore = algo.toLowerCase().includes('rsa')
+          ? '// 기존 RSA 코드 예시\nRSA rsa = RSA.Create(2048);\nbyte[] encryptedData = rsa.Encrypt(plainData, RSAEncryptionPadding.Pkcs1);'
+          : algo.toLowerCase().includes('ecc') || algo.toLowerCase().includes('ecdsa')
+          ? '// 기존 ECDSA 코드 예시\nECDsa ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);\nbyte[] signature = ecdsa.SignData(data, HashAlgorithmName.SHA256);'
+          : '// 기존 암호화 코드\n// ' + algo + ' 알고리즘 사용';
+        const exampleAfter = algo.toLowerCase().includes('rsa')
+          ? '// PQC로 전환된 코드 예시\n// CRYSTALS-Kyber를 사용한 키 교환\nKyberKeyPair keyPair = Kyber.GenerateKeyPair(KyberParameterSet.Kyber768);\nbyte[] ciphertext = Kyber.Encapsulate(keyPair.PublicKey, out byte[] sharedSecret);'
+          : algo.toLowerCase().includes('ecc') || algo.toLowerCase().includes('ecdsa')
+          ? '// PQC로 전환된 코드 예시\n// CRYSTALS-Dilithium을 사용한 서명\nDilithiumKeyPair keyPair = Dilithium.GenerateKeyPair(DilithiumParameterSet.Dilithium3);\nbyte[] signature = Dilithium.Sign(data, keyPair.PrivateKey);'
+          : '// PQC 전환 코드\n// NIST 표준 PQC 알고리즘 사용';
+        return `\n${i+1}. ${algo} 전환:\n   - 권장 PQC: ${pqcRecommendation}\n   \n   [기존 코드]\n${exampleBefore}\n\n   [PQC 전환 코드]\n${exampleAfter}\n\n   - 단계: ① 라이브러리 선정 → ② 테스트 환경 구축 → ③ 호환성 검증 → ④ 단계적 배포\n   - 고려사항: 기존 시스템과의 호환성, 성능 영향 평가`;
+      }).join('\n')}\n\n전환 우선순위:\nHigh 심각도 항목부터 우선 전환을 시작하고, 단계적으로 전체 시스템에 적용합니다.\n\n테스트 방법:\n- PQC 라이브러리 정상 동작 확인\n- 기존 데이터 호환성 테스트\n- 성능 벤치마크 수행\n- 보안 감사 실시\n\n참고 자료:\n- NIST PQC 표준: csrc.nist.gov/projects/post-quantum-cryptography\n- CRYSTALS 라이브러리: pq-crystals.org`,
       detectionTableRows,
       migrationTableRows,
       ...detectionCounts
