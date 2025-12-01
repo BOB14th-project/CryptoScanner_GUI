@@ -419,10 +419,12 @@ function calculateDetectionCounts(detections: Detection[], llmScanResult?: LLMSc
   findMidNum: number;
   findLowNum: number;
   findAllNum: number;
+  highSeverityAlgorithms: string;
 } {
   let findHighNum = 0;
   let findMidNum = 0;
   let findLowNum = 0;
+  const highAlgorithmsSet = new Set<string>();
 
   // 기존 탐지 결과 카운팅
   detections.forEach(detection => {
@@ -430,6 +432,7 @@ function calculateDetectionCounts(detections: Detection[], llmScanResult?: LLMSc
 
     if (severity.includes('high') || severity.includes('심각')) {
       findHighNum++;
+      highAlgorithmsSet.add(detection.algorithm);
     } else if (severity.includes('medium') || severity.includes('med') || severity.includes('경고')) {
       findMidNum++;
     } else if (severity.includes('low') || severity.includes('낮음')) {
@@ -449,9 +452,13 @@ function calculateDetectionCounts(detections: Detection[], llmScanResult?: LLMSc
       if (!alreadyDetected) {
         // LLM이 탐지한 알고리즘은 기본적으로 High로 카운팅
         findHighNum++;
+        highAlgorithmsSet.add(algorithm);
       }
     });
   }
+
+  // 위험도 상 알고리즘을 1줄로 정리
+  const highSeverityAlgorithms = Array.from(highAlgorithmsSet).join(', ');
 
   return {
     findHighNum,
@@ -463,7 +470,8 @@ function calculateDetectionCounts(detections: Detection[], llmScanResult?: LLMSc
           d.algorithm.toLowerCase().includes(algo.toLowerCase()) ||
           algo.toLowerCase().includes(d.algorithm.toLowerCase())
         )
-      ).length : 0)
+      ).length : 0),
+    highSeverityAlgorithms
   };
 }
 
@@ -488,6 +496,7 @@ async function generateReportContent(
   findMidNum: number;
   findLowNum: number;
   findAllNum: number;
+  highSeverityAlgorithms: string;
 }> {
   // 탐지 수치 계산 (LLM 결과 포함)
   const detectionCounts = calculateDetectionCounts(scanResult.detections, scanResult.llmScanResult);
@@ -530,7 +539,11 @@ async function generateReportContent(
       }).join('\n')}\n\n전환 우선순위:\nHigh 심각도 항목부터 우선 전환을 시작하고, 단계적으로 전체 시스템에 적용합니다.\n\n테스트 방법:\n- PQC 라이브러리 정상 동작 확인\n- 기존 데이터 호환성 테스트\n- 성능 벤치마크 수행\n- 보안 감사 실시\n\n참고 자료:\n- NIST PQC 표준: csrc.nist.gov/projects/post-quantum-cryptography\n- CRYSTALS 라이브러리: pq-crystals.org`,
       detectionTableRows,
       migrationTableRows,
-      ...detectionCounts
+      findHighNum: detectionCounts.findHighNum,
+      findMidNum: detectionCounts.findMidNum,
+      findLowNum: detectionCounts.findLowNum,
+      findAllNum: detectionCounts.findAllNum,
+      highSeverityAlgorithms: detectionCounts.highSeverityAlgorithms
     };
   }
 
@@ -723,7 +736,11 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
           migrationGuide: parsedResponse.migrationGuide || '마이그레이션 가이드를 생성할 수 없습니다.',
           detectionTableRows,
           migrationTableRows,
-          ...detectionCounts
+          findHighNum: detectionCounts.findHighNum,
+          findMidNum: detectionCounts.findMidNum,
+          findLowNum: detectionCounts.findLowNum,
+          findAllNum: detectionCounts.findAllNum,
+          highSeverityAlgorithms: detectionCounts.highSeverityAlgorithms
         };
       } catch (firstError) {
         console.log('[Gemini] First parse attempt failed, trying to save raw response');
@@ -817,7 +834,11 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
               migrationGuide: migrationGuide,
               detectionTableRows,
               migrationTableRows,
-              ...detectionCounts
+              findHighNum: detectionCounts.findHighNum,
+              findMidNum: detectionCounts.findMidNum,
+              findLowNum: detectionCounts.findLowNum,
+              findAllNum: detectionCounts.findAllNum,
+              highSeverityAlgorithms: detectionCounts.highSeverityAlgorithms
             };
           } else {
             console.error('[Gemini] Manual extraction failed - missing fields:', {
@@ -872,7 +893,11 @@ Remember: Be THOROUGH, SPECIFIC, and TECHNICAL. This report will be used by deve
       }).join('\n')}\n\n전환 우선순위:\nHigh 심각도 항목부터 우선 전환을 시작하고, 단계적으로 전체 시스템에 적용합니다.\n\n테스트 방법:\n- PQC 라이브러리 정상 동작 확인\n- 기존 데이터 호환성 테스트\n- 성능 벤치마크 수행\n- 보안 감사 실시\n\n참고 자료:\n- NIST PQC 표준: csrc.nist.gov/projects/post-quantum-cryptography\n- CRYSTALS 라이브러리: pq-crystals.org`,
       detectionTableRows,
       migrationTableRows,
-      ...detectionCounts
+      findHighNum: detectionCounts.findHighNum,
+      findMidNum: detectionCounts.findMidNum,
+      findLowNum: detectionCounts.findLowNum,
+      findAllNum: detectionCounts.findAllNum,
+      highSeverityAlgorithms: detectionCounts.highSeverityAlgorithms
     };
   }
 }
@@ -925,6 +950,7 @@ export async function generateReport(scanResult: ScanResult, outputPath: string)
         findMidNum: reportContent.findMidNum,
         findLowNum: reportContent.findLowNum,
         findAllNum: reportContent.findAllNum,
+        highSeverityAlgorithms: reportContent.highSeverityAlgorithms,
         detectionRows: reportContent.detectionTableRows,
         migrationRows: reportContent.migrationTableRows,
         detailContent: reportContent.detailContent,
