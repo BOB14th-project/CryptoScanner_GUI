@@ -125,11 +125,12 @@ LoadResult loadFromJsonFile(const std::string& path){
             if(!v.isObject()) continue;
             const auto o = v.toObject();
 
-            const std::string name   = getString(o, "name", "");
-            const std::string pat    = getString(o, "pattern", "");
-            const bool icase         = getBool(o, "icase", true);
-            const bool literal       = getBool(o, "literal", false);
-            const std::string syntax = getString(o, "syntax", "ECMAScript");
+            const std::string name     = getString(o, "name", "");
+            const std::string pat      = getString(o, "pattern", "");
+            const bool icase           = getBool(o, "icase", true);
+            const bool literal         = getBool(o, "literal", false);
+            const std::string syntax   = getString(o, "syntax", "ECMAScript");
+            const std::string severity = getString(o, "severity", "low");
 
             if(name.empty() || pat.empty()) continue;
 
@@ -137,8 +138,9 @@ LoadResult loadFromJsonFile(const std::string& path){
             auto rx = compileRegexSafe(pat, icase, literal, syntax, why);
             if (rx){
                 AlgorithmPattern ap;
-                ap.name    = name;
-                ap.pattern = std::move(*rx);
+                ap.name     = name;
+                ap.pattern  = std::move(*rx);
+                ap.severity = severity;
                 R.regexPatterns.push_back(std::move(ap));
             }else{
                 warn << "[regex] skip '" << name << "': " << why << "\n";
@@ -151,15 +153,17 @@ LoadResult loadFromJsonFile(const std::string& path){
             if(!v.isObject()) continue;
             const auto o = v.toObject();
 
-            const std::string name = getString(o, "name", "");
-            const std::string hex  = getString(o, "hex", "");
-            const std::string type = getString(o, "type", "bytes");
+            const std::string name     = getString(o, "name", "");
+            const std::string hex      = getString(o, "hex", "");
+            const std::string type     = getString(o, "type", "bytes");
+            const std::string severity = getString(o, "severity", "high");
             if(name.empty() || hex.empty()) continue;
 
             BytePattern bp;
-            bp.name  = name;
-            bp.bytes = parseHexBytes(hex);
-            bp.type  = type;
+            bp.name     = name;
+            bp.bytes    = parseHexBytes(hex);
+            bp.type     = type;
+            bp.severity = severity;
             if(!bp.bytes.empty()){
                 R.bytePatterns.push_back(std::move(bp));
             }else{

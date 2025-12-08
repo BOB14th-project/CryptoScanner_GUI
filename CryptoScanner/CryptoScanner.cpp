@@ -291,6 +291,18 @@ CryptoScanner::CryptoScanner() {
     }
     patterns = LR.regexPatterns;
     oidBytePatterns = LR.bytePatterns;
+
+    // Build severity maps for fast lookup
+    patternSeverityMap.clear();
+    for (const auto& ap : patterns) {
+        patternSeverityMap[ap.name] = ap.severity.empty() ? "low" : ap.severity;
+    }
+
+    byteSeverityMap.clear();
+    for (const auto& bp : oidBytePatterns) {
+        byteSeverityMap[bp.name] = bp.severity.empty() ? "high" : bp.severity;
+    }
+
     patternsApiOnly.clear();
     patternsApiOnly.reserve(patterns.size());
     for (const auto& ap : patterns) {
@@ -301,15 +313,25 @@ CryptoScanner::CryptoScanner() {
     activeOpt = ScanOptions();
 }
 
-std::string CryptoScanner::severityForTextPattern(const std::string& algName, const std::string& matched) {
+std::string CryptoScanner::severityForTextPattern(const std::string& algName, const std::string& matched) const {
     (void)matched;
-    if (algName.find("OID dotted") != std::string::npos) return "high";
-    if (algName.find("PEM Header") != std::string::npos) return "med";
-    if (algName.find("API (OpenSSL)") != std::string::npos
-        || algName.find("API (Windows CNG/CAPI)") != std::string::npos
-        || algName.find("API (libgcrypt)") != std::string::npos) return "med";
-    if (algName.find("MD5") != std::string::npos || algName.find("SHA-1") != std::string::npos) return "med";
+    // Look up severity from pattern map
+    auto it = patternSeverityMap.find(algName);
+    if (it != patternSeverityMap.end()) {
+        return it->second;
+    }
+    // Fallback to default
     return "low";
+}
+
+std::string CryptoScanner::severityForBytePattern(const std::string& byteName) const {
+    // Look up severity from byte pattern map
+    auto it = byteSeverityMap.find(byteName);
+    if (it != byteSeverityMap.end()) {
+        return it->second;
+    }
+    // Fallback to default
+    return "high";
 }
 
 std::string CryptoScanner::severityForByteType(const std::string& type) {
@@ -433,7 +455,7 @@ std::vector<Detection> CryptoScanner::scanCertOrKeyFileDetailed(const std::strin
             const std::string t = typeByName.count(alg.first) ? typeByName[alg.first] : std::string();
             if (!isOidType(t)) continue;
             for (const auto& e : alg.second) {
-                Detection d{ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForByteType(t) };
+                Detection d{ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForBytePattern(alg.first) };
                 out.push_back(std::move(d));
             }
         }
@@ -475,11 +497,11 @@ std::vector<Detection> CryptoScanner::scanBinaryWholeFile(const std::string& fil
             if (isCurveParamNName(alg.first)) continue;
             for (const auto& e : alg.second) {
                 if (!nearAny(oidAnchors, e.second, ctxWin)) continue;
-                results.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForByteType(t) });
+                results.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForBytePattern(alg.first) });
             }
         } else if (isOidType(t)) {
             for (const auto& e : alg.second) {
-                results.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForByteType(t) });
+                results.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForBytePattern(alg.first) });
             }
         }
     }
@@ -551,11 +573,11 @@ std::vector<Detection> CryptoScanner::scanClassFileDetailed(const std::string& f
             if (isCurveParamNName(alg.first)) continue;
             for (const auto& e : alg.second) {
                 if (!nearAny(oidAnchors, e.second, ctxWin)) continue;
-                out.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForByteType(t) });
+                out.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForBytePattern(alg.first) });
             }
         } else if (isOidType(t)) {
             for (const auto& e : alg.second) {
-                out.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForByteType(t) });
+                out.push_back({ filePath, e.second, alg.first, e.first, evidenceLabelForByteType(t), severityForBytePattern(alg.first) });
             }
         }
     }

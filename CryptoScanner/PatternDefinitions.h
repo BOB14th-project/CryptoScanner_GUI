@@ -8,12 +8,14 @@
 struct AlgorithmPattern {
     std::string name;
     std::regex  pattern;
+    std::string severity;  // "high", "med", "low"
 };
 
 struct BytePattern {
     std::string name;
     std::vector<uint8_t> bytes;
     std::string type;
+    std::string severity;  // "high", "med", "low"
 };
 
 namespace pattern_loader { struct AstRule; }

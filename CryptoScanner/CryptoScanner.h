@@ -73,8 +73,11 @@ private:
     std::vector<AlgorithmPattern> patterns;
     std::vector<AlgorithmPattern> patternsApiOnly;
     std::vector<BytePattern>      oidBytePatterns;
+    std::unordered_map<std::string, std::string> patternSeverityMap;  // algName -> severity
+    std::unordered_map<std::string, std::string> byteSeverityMap;     // byteName -> severity
 
-    static std::string severityForTextPattern(const std::string& algName, const std::string& matched);
+    std::string severityForTextPattern(const std::string& algName, const std::string& matched) const;
+    std::string severityForBytePattern(const std::string& byteName) const;
     static std::string severityForByteType(const std::string& type);
     static std::string evidenceTypeForTextPattern(const std::string& algName);
     static std::string evidenceLabelForByteType(const std::string& type);
