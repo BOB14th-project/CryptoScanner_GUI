@@ -5,8 +5,16 @@
 <br />
 
 **CryptoScanner**은 실행파일, 소스코드, 키 / 인증서를 위주로 양자내성암호(PQC)로의 전환이 필요한 암호화 알고리즘을 탐지하고 분석하는 강력한 도구입니다.
-
 <br />
+
+이 프로젝트는 크게 세 가지 분석 방식을 결합합니다.
+
+- **정적 분석(Static Analysis)**: 코드/바이너리에서 암호 관련 흔적(알고리즘, 라이브러리 사용 등)을 찾아 “어디에 무엇이 쓰였는지”를 인벤토리 형태로 정리합니다.
+- **동적 분석(Dynamic Analysis)**: 프로그램 실행 중에 발생하는 암호 연산/라이브러리 호출 정보를 수집해, 정적 분석만으로 놓치기 쉬운 런타임 사용을 보완합니다.
+- **AI 분석**: 이전의 분석 과정에서 찾아내지 못한 연산을 LLM을 이용하여 분석하고, PQC migration 가이드를 제공합니다
+
+[Wiki](https://github.com/BOB14th-project/CryptoScanner_GUI/wiki/0.-Home)
+
 
 # 📂 프로그램 구조
 
@@ -302,12 +310,12 @@ Google_API_KEY=[API KEY]
 
 # 🧑🏻‍💻 개발자
 ### 개발 기간
-2025.09. ~ ING
+2025.09. ~ 2025.12.
 <br />
 
 ### 개발자
 🧑🏻‍💻 정진호 [(@ZINH00)](https://github.com/ZINH00) \
-🧑🏻‍💻 서정민 [(@seojungmin)](https://github.com/noir1458) \
+🧑🏻‍💻 서정민 [(@noir1458)](https://github.com/noir1458) \
 🧑🏻‍💻 하준수 [(@JunsuHa)](https://github.com/junsu0306) \
 👩🏻‍💻 신찬희 [(@chan-068)](https://github.com/chan-068) \
 🧑🏻‍💻 한상우 [(@Sangwoo Hahn)](https://github.com/sw-player)
