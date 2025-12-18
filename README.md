@@ -13,10 +13,8 @@
 
 - **정적 분석(Static Analysis)**: 코드/바이너리에서 암호 관련 흔적(알고리즘, 라이브러리 사용 등)을 찾아 “어디에 무엇이 쓰였는지”를 인벤토리 형태로 정리합니다.
 - **동적 분석(Dynamic Analysis)**: 프로그램 실행 중에 발생하는 암호 연산/라이브러리 호출 정보를 수집해, 정적 분석만으로 놓치기 쉬운 런타임 사용을 보완합니다.
-- **LLM 분석**: 이전의 분석 과정에서 찾아내지 못한 연산을 LLM을 이용하여 분석하고, PQC migration 가이드를 제공합니다
-
-[CryptoScanner Wiki](https://github.com/BOB14th-project/CryptoScanner_GUI/wiki/0.-Home)
-
+- **LLM 분석**: 이전의 분석 과정에서 찾아내지 못한 연산을 LLM을 이용하여 분석하고, PQC migration 가이드를 제공합니다.
+</br>
 
 # 📂 프로그램 구조
 
@@ -301,6 +299,12 @@ Google_API_KEY=[API KEY]
 - 진행률 바 및 시간 정보 (경과/예상 시간)
 
 <br />
+
+# ℹ️ 위키 Wiki
+[![CryptoScanner Wiki](https://img.shields.io/badge/Wiki-black.svg)](https://github.com/BOB14th-project/CryptoScanner_GUI/wiki/0.-Home)
+<br />
+
+이 프로젝트에 대한 자세한 내용은 [CryptoScanner Wiki](https://github.com/BOB14th-project/CryptoScanner_GUI/wiki/0.-Home) 위키에서 확인하실 수 있습니다.
 
 # 🪪 라이선스
 ![License](https://img.shields.io/badge/License-MIT-black.svg)
